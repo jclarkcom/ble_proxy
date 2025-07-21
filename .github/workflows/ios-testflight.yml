@@ -173,15 +173,22 @@ jobs:
         fi
         echo ""
 
-        # Apply provisioning profile
+        # Apply provisioning profile to the correct location
         echo "🔧 Installing provisioning profile..."
-        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-        echo "✅ Provisioning profile installed"
+        PP_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+        mkdir -p "$PP_DIR"
+        
+        # Copy with UUID-based filename (Xcode convention)
+        cp "$PP_PATH" "$PP_DIR/${PROFILE_UUID}.mobileprovision"
+        echo "✅ Provisioning profile installed as ${PROFILE_UUID}.mobileprovision"
+        
+        # Also create a copy with the name Xcode might look for
+        cp "$PP_PATH" "$PP_DIR/build_pp.mobileprovision" 
+        echo "✅ Also installed as build_pp.mobileprovision (backup name)"
         
         # List installed profiles for verification
         echo "🔍 Installed provisioning profiles:"
-        ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
+        ls -la "$PP_DIR"
 
     - name: Update Bundle Identifier and Version
       run: |
