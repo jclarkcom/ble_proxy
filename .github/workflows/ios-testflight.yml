@@ -41,16 +41,87 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-xcode-derived-data-
 
-    - name: Install Apple Certificate
-      uses: apple-actions/import-codesign-certs@v3
-      with:
-        p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-        p12-password: ${{ secrets.P12_PASSWORD }}
-        keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
-
-    - name: Debug P12 password length   # <-- TEMP: delete after test
-      run: echo "Password length is ${#P12_PASSWORD}"
-      shell: bash
+    - name: Install Apple Certificate (Debug Approach)
+      env:
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # Debug: Show environment info
+        echo "🔍 System Info:"
+        echo "OS: $(uname -a)"
+        echo "Base64 version: $(base64 --version || echo 'base64 command info not available')"
+        echo ""
+        
+        # Debug: Check secret lengths
+        echo "🔍 Secret Info:"
+        echo "BUILD_CERTIFICATE_BASE64 length: ${#BUILD_CERTIFICATE_BASE64}"
+        echo "P12_PASSWORD length: ${#P12_PASSWORD}"
+        echo "P12_PASSWORD value: '$P12_PASSWORD'"
+        echo ""
+        
+        # Create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+        
+        # Debug: Show paths
+        echo "🔍 Paths:"
+        echo "CERTIFICATE_PATH: $CERTIFICATE_PATH"
+        echo "KEYCHAIN_PATH: $KEYCHAIN_PATH"
+        echo "RUNNER_TEMP: $RUNNER_TEMP"
+        echo ""
+        
+        # Import certificate from secrets with debugging
+        echo "🔧 Decoding base64 certificate..."
+        echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
+        
+        # Verify the certificate file was created
+        if [ -f "$CERTIFICATE_PATH" ]; then
+          echo "✅ Certificate file created successfully"
+          echo "File size: $(wc -c < $CERTIFICATE_PATH) bytes"
+          echo "File type: $(file $CERTIFICATE_PATH)"
+        else
+          echo "❌ Certificate file was not created!"
+          exit 1
+        fi
+        echo ""
+        
+        # Test certificate with openssl before keychain import
+        echo "🔧 Testing certificate with OpenSSL..."
+        if openssl pkcs12 -in $CERTIFICATE_PATH -nokeys -passin pass:$P12_PASSWORD -noout; then
+          echo "✅ Certificate password verification successful with OpenSSL"
+        else
+          echo "❌ Certificate password verification failed with OpenSSL"
+          echo "This indicates the base64 or password is corrupted"
+          exit 1
+        fi
+        echo ""
+        
+        # Create temporary keychain
+        echo "🔧 Creating keychain..."
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        echo "✅ Keychain created and unlocked"
+        echo ""
+        
+        # Import certificate to keychain
+        echo "🔧 Importing certificate to keychain..."
+        if security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH; then
+          echo "✅ Certificate imported successfully"
+        else
+          echo "❌ Certificate import failed"
+          echo "Exit code: $?"
+          exit 1
+        fi
+        
+        # List certificates in keychain
+        echo "🔍 Certificates in keychain:"
+        security find-identity -v -p codesigning $KEYCHAIN_PATH
+        
+        # Set keychain as default
+        security list-keychain -d user -s $KEYCHAIN_PATH
+        echo "✅ Certificate setup complete"
 
     - name: Install Provisioning Profile
       env:
