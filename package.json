@@ -1,0 +1,33 @@
+{
+  "name": "ble-proxy-system",
+  "version": "1.0.0",
+  "description": "BLE HTTP Proxy System - Routes browser traffic through iOS device via BLE",
+  "main": "start-demo.js",
+  "scripts": {
+    "demo": "node start-demo.js",
+    "test": "node test-system.js",
+    "install-all": "cd windows-proxy && npm install && cd ../mock-ios-service && npm install",
+    "clean": "cd windows-proxy && rm -rf node_modules && cd ../mock-ios-service && rm -rf node_modules"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2"
+  },
+  "workspaces": [
+    "windows-proxy",
+    "mock-ios-service"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "ble",
+    "bluetooth",
+    "proxy",
+    "http",
+    "ios",
+    "windows",
+    "mock"
+  ],
+  "author": "BLE Proxy System",
+  "license": "MIT"
+} 

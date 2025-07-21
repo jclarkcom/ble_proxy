@@ -1,0 +1,28 @@
+{
+  "name": "mock-ios-service",
+  "version": "1.0.0",
+  "description": "Mock iOS BLE service for testing - simulates iOS app using TCP sockets",
+  "main": "mock-ios.js",
+  "scripts": {
+    "start": "node mock-ios.js",
+    "dev": "node --inspect mock-ios.js",
+    "demo": "node demo.js"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "uuid": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "mock",
+    "ios",
+    "ble",
+    "simulation",
+    "proxy",
+    "tcp"
+  ],
+  "author": "BLE Proxy System",
+  "license": "MIT"
+} 

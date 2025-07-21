@@ -1,0 +1,168 @@
+name: iOS TestFlight Deployment
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'ios-app/**'
+      - '.github/workflows/ios-testflight.yml'
+  pull_request:
+    branches: [ main ]
+    paths: 
+      - 'ios-app/**'
+  workflow_dispatch:
+    inputs:
+      deploy_to_testflight:
+        description: 'Deploy to TestFlight'
+        required: true
+        default: 'false'
+        type: boolean
+
+env:
+  XCODE_VERSION: '15.0'
+  IOS_VERSION: '17.0'
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Select Xcode Version
+      run: sudo xcode-select -switch /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+
+    - name: Cache Xcode DerivedData
+      uses: actions/cache@v3
+      with:
+        path: ~/Library/Developer/Xcode/DerivedData
+        key: ${{ runner.os }}-xcode-derived-data-${{ hashFiles('ios-app/**/*.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-xcode-derived-data-
+
+    - name: Install Apple Certificate
+      env:
+        BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      run: |
+        # Create variables
+        CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+        KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+        # Import certificate from secrets
+        echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+        # Create temporary keychain
+        security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+        security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+        # Import certificate to keychain
+        security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+        security list-keychain -d user -s $KEYCHAIN_PATH
+
+    - name: Install Provisioning Profile
+      env:
+        PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      run: |
+        # Create variables
+        PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+
+        # Import provisioning profile from secrets
+        echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+        # Apply provisioning profile
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+    - name: Update Bundle Identifier and Version
+      run: |
+        cd ios-app
+        
+        # Update version and build number based on GitHub run number
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" BLEProxy/Info.plist
+        
+        # Update version string (use tag if available, otherwise use date)
+        if [ "${{ github.ref_type }}" == "tag" ]; then
+          VERSION_STRING="${{ github.ref_name }}"
+        else
+          VERSION_STRING="1.0.${{ github.run_number }}"
+        fi
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION_STRING" BLEProxy/Info.plist
+        
+        echo "Updated version to: $VERSION_STRING (build ${{ github.run_number }})"
+
+    - name: Build Archive
+      run: |
+        cd ios-app
+        xcodebuild -project BLEProxy.xcodeproj \
+                   -scheme BLEProxy \
+                   -sdk iphoneos \
+                   -configuration Release \
+                   -archivePath $PWD/build/BLEProxy.xcarchive \
+                   clean archive \
+                   CODE_SIGN_STYLE=Manual \
+                   DEVELOPMENT_TEAM="${{ secrets.DEVELOPMENT_TEAM_ID }}" \
+                   CODE_SIGN_IDENTITY="iPhone Distribution" \
+                   PROVISIONING_PROFILE_SPECIFIER="${{ secrets.PROVISIONING_PROFILE_NAME }}"
+
+    - name: Export IPA
+      env:
+        EXPORT_OPTIONS_PLIST: ${{ secrets.EXPORT_OPTIONS_PLIST }}
+      run: |
+        cd ios-app
+        
+        # Create export options plist
+        echo -n "$EXPORT_OPTIONS_PLIST" | base64 --decode > $PWD/exportOptions.plist
+        
+        # Export archive to IPA
+        xcodebuild -exportArchive \
+                   -archivePath $PWD/build/BLEProxy.xcarchive \
+                   -exportOptionsPlist $PWD/exportOptions.plist \
+                   -exportPath $PWD/build/
+
+    - name: Upload to TestFlight
+      if: github.event.inputs.deploy_to_testflight == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push')
+      env:
+        APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+      run: |
+        cd ios-app
+        
+        # Create API key file
+        mkdir -p ~/.appstoreconnect/private_keys/
+        echo -n "$APP_STORE_CONNECT_API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8
+        
+        # Upload to TestFlight
+        xcrun altool --upload-app \
+                     --type ios \
+                     --file build/BLEProxy.ipa \
+                     --apiKey $APP_STORE_CONNECT_API_KEY_ID \
+                     --apiIssuer $APP_STORE_CONNECT_API_ISSUER_ID
+
+    - name: Upload Build Artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: ios-build-artifacts
+        path: |
+          ios-app/build/BLEProxy.xcarchive
+          ios-app/build/BLEProxy.ipa
+        retention-days: 30
+
+    - name: Clean up Keychain and Provisioning Profile
+      if: always()
+      run: |
+        security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+        rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build_pp.mobileprovision || true
+
+    - name: Notify Success
+      if: success() && (github.event.inputs.deploy_to_testflight == 'true' || (github.ref == 'refs/heads/main' && github.event_name == 'push'))
+      run: |
+        echo "✅ iOS app successfully deployed to TestFlight!"
+        echo "🔗 Check TestFlight status in App Store Connect"
+        echo "📱 Build: ${{ github.run_number }}"
+        echo "🏷️ Commit: ${{ github.sha }}" 

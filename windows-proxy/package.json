@@ -1,0 +1,33 @@
+{
+  "name": "ble-proxy-windows",
+  "version": "1.0.0",
+  "description": "BLE HTTP Proxy for Windows - Proxies browser requests through BLE to iOS device",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js",
+    "dev": "node --inspect proxy.js",
+    "demo": "node demo.js",
+    "mock": "cross-env MOCK_MODE=true node proxy.js",
+    "mock-demo": "cross-env MOCK_MODE=true node demo.js",
+    "install-build-tools": "npm install -g windows-build-tools"
+  },
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-15",
+    "chalk": "^4.1.2",
+    "cross-env": "^7.0.3",
+    "uuid": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "ble",
+    "bluetooth",
+    "proxy",
+    "http",
+    "ios",
+    "windows"
+  ],
+  "author": "BLE Proxy System",
+  "license": "MIT"
+} 
