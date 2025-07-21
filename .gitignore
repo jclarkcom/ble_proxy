@@ -42,7 +42,11 @@ fastlane/test_output
 *.pem
 development.cer
 distribution.cer
+ios_distribution.cer
 AuthKey_*.p8
+
+# iOS Distribution Certificate Files (generated locally)
+ios_distribution*
 
 # Xcode config files with sensitive info
 exportOptions.plist
