@@ -41,12 +41,12 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-xcode-derived-data-
 
-          - name: Install Apple Certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          p12-password: ${{ secrets.P12_PASSWORD }}
-          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+    - name: Install Apple Certificate
+      uses: apple-actions/import-codesign-certs@v3
+      with:
+        p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+        p12-password: ${{ secrets.P12_PASSWORD }}
+        keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
 
     - name: Debug P12 password length   # <-- TEMP: delete after test
       run: echo "Password length is ${#P12_PASSWORD}"
