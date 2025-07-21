@@ -123,19 +123,65 @@ jobs:
         security list-keychain -d user -s $KEYCHAIN_PATH
         echo "✅ Certificate setup complete"
 
-    - name: Install Provisioning Profile
+    - name: Install Provisioning Profile (Debug Approach)
       env:
         PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
       run: |
+        # Debug: Check provisioning profile secret
+        echo "🔍 Provisioning Profile Info:"
+        echo "PROVISIONING_PROFILE_BASE64 length: ${#PROVISIONING_PROFILE_BASE64}"
+        echo ""
+        
         # Create variables
         PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
 
-        # Import provisioning profile from secrets
-        echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+        # Debug: Show path
+        echo "🔍 Provisioning Profile Path: $PP_PATH"
+        echo ""
+
+        # Import provisioning profile from secrets with better decoding
+        echo "🔧 Decoding base64 provisioning profile..."
+        echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > $PP_PATH
+
+        # Verify the provisioning profile file was created
+        if [ -f "$PP_PATH" ]; then
+          echo "✅ Provisioning profile file created successfully"
+          echo "File size: $(wc -c < $PP_PATH) bytes"
+          echo "File type: $(file $PP_PATH)"
+        else
+          echo "❌ Provisioning profile file was not created!"
+          exit 1
+        fi
+        echo ""
+        
+        # Test provisioning profile with security command
+        echo "🔧 Testing provisioning profile..."
+        if security cms -D -i $PP_PATH > /dev/null 2>&1; then
+          echo "✅ Provisioning profile format validation successful"
+          
+          # Extract UUID for verification
+          PROFILE_UUID=$(security cms -D -i $PP_PATH | plutil -extract UUID raw -)
+          echo "Profile UUID: $PROFILE_UUID"
+          
+          # Extract name for verification  
+          PROFILE_NAME=$(security cms -D -i $PP_PATH | plutil -extract Name raw -)
+          echo "Profile Name: $PROFILE_NAME"
+        else
+          echo "❌ Provisioning profile format validation failed"
+          echo "This indicates the base64 provisioning profile is corrupted"
+          exit 1
+        fi
+        echo ""
 
         # Apply provisioning profile
+        echo "🔧 Installing provisioning profile..."
         mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
         cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+        echo "✅ Provisioning profile installed"
+        
+        # List installed profiles for verification
+        echo "🔍 Installed provisioning profiles:"
+        ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
 
     - name: Update Bundle Identifier and Version
       run: |
