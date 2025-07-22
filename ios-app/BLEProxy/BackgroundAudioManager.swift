@@ -12,6 +12,7 @@ class BackgroundAudioManager: NSObject, ObservableObject {
     private let logger = Logger(subsystem: "com.bleproxy.app", category: "BackgroundAudio")
     
     override init() {
+        super.init()
         setupAudioSession()
         setupNotifications()
     }
