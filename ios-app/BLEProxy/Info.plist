@@ -6,7 +6,7 @@
 	<array>
 		<string>audio</string>
 		<string>bluetooth-peripheral</string>
-		<string>background-processing</string>
+		<string>background-fetch</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app uses Bluetooth to provide proxy services to nearby devices, allowing web browsing through this device's internet connection.</string>
@@ -24,6 +24,8 @@
 	<string>BLEProxy</string>
 	<key>CFBundleExecutable</key>
 	<string>BLEProxy</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
 	<key>CFBundleIdentifier</key>
 	<string>bleproxy.innerscene.com</string>
 	<key>CFBundleVersion</key>
@@ -32,8 +34,19 @@
 	<string>1.0</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>systemBackground</string>
+		<key>UILaunchScreen</key>
+		<dict>
+			<key>UITabBar</key>
+			<dict>
+				<key>UITabBarAppearance</key>
+				<dict/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -41,6 +54,7 @@
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
