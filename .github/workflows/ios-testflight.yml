@@ -281,9 +281,31 @@ jobs:
       run: |
         cd ios-app
         
-        # Create API key file
+        # Debug: Check App Store Connect secrets
+        echo "🔍 App Store Connect API Debug:"
+        echo "API_KEY_ID length: ${#APP_STORE_CONNECT_API_KEY_ID}"
+        echo "API_ISSUER_ID length: ${#APP_STORE_CONNECT_API_ISSUER_ID}"
+        echo "API_KEY length: ${#APP_STORE_CONNECT_API_KEY}"
+        echo ""
+        
+        # Create API key file with validation
         mkdir -p ~/.appstoreconnect/private_keys/
+        API_KEY_PATH="~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8"
+        
+        echo "🔧 Decoding API key..."
         echo -n "$APP_STORE_CONNECT_API_KEY" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8
+        
+        # Validate the decoded file
+        if [ -f ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8 ]; then
+          echo "✅ API key file created successfully"
+          echo "File size: $(wc -c < ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8) bytes"
+          echo "File type: $(file ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8)"
+          echo "First line: $(head -1 ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_API_KEY_ID.p8)"
+        else
+          echo "❌ API key file was not created!"
+          exit 1
+        fi
+        echo ""
         
         # Upload to TestFlight
         xcrun altool --upload-app \
