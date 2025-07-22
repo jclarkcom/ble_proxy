@@ -19,19 +19,36 @@ on:
         type: boolean
 
 env:
-  XCODE_VERSION: '15.2'
-  IOS_VERSION: '18.0'
+  XCODE_VERSION: '15.0'
+  IOS_VERSION: '17.0'
 
 jobs:
   build-and-deploy:
-    runs-on: macos-15
+    runs-on: macos-14
     
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Select Xcode Version
-      run: sudo xcode-select -switch /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+    - name: Check Available Xcode Versions
+      run: |
+        echo "🔍 Available Xcode versions:"
+        ls -la /Applications/ | grep Xcode || echo "No Xcode applications found"
+        echo ""
+        echo "🔍 Current Xcode version:"
+        xcode-select -p
+        xcodebuild -version
+    
+    - name: Select Xcode Version (if available)
+      run: |
+        if [ -d "/Applications/Xcode_${{ env.XCODE_VERSION }}.app" ]; then
+          echo "✅ Xcode ${{ env.XCODE_VERSION }} found, selecting it"
+          sudo xcode-select -switch /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+        else
+          echo "⚠️  Xcode ${{ env.XCODE_VERSION }} not found, using default Xcode"
+          echo "Current default Xcode:"
+          xcodebuild -version
+        fi
 
     - name: Cache Xcode DerivedData
       uses: actions/cache@v3
