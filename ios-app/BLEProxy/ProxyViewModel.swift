@@ -173,8 +173,8 @@ class ProxyViewModel: ObservableObject {
     }
     
     private func startUptimeTimer() {
-        uptimeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        uptimeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 self?.updateUptime()
             }
         }
