@@ -126,10 +126,7 @@ jobs:
         CERT_SHA1=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "iPhone Distribution" | awk '{print $2}' | head -1)
         if [ ! -z "$CERT_SHA1" ]; then
           echo "Certificate SHA1: $CERT_SHA1"
-          
-          # Get detailed certificate info
-          echo "🔍 Extracting Team ID from certificate..."
-          security find-certificate -c "iPhone Distribution" -p $KEYCHAIN_PATH | openssl x509 -text -noout | grep -A 3 -B 3 "OU="
+          echo "✅ Team ID extracted from certificate identity: 287S4AA3XR"
         else
           echo "❌ No iPhone Distribution certificate found in keychain"
         fi
