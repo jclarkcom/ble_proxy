@@ -38,6 +38,11 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     private var receivingData: [CBCentral: ReceivingData] = [:]
     private var pendingResponses: [CBCentral: [Data]] = [:]
     
+    // Public getter for connected centrals
+    var connectedClients: Set<CBCentral> {
+        return connectedCentrals
+    }
+    
     // MARK: - Delegate
     weak var delegate: BLEPeripheralManagerDelegate?
     
@@ -132,7 +137,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         }
         
         // Add length header
-        let totalLength = UInt32(data.count)
+        var totalLength = UInt32(data.count)
         var headerData = Data()
         headerData.append(Data(bytes: &totalLength, count: 4))
         let fullData = headerData + data

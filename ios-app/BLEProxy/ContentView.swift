@@ -54,7 +54,7 @@ struct ContentView: View {
                         .frame(height: 56)
                         .background(
                             viewModel.isProxyActive ? 
-                            Color.red.gradient : Color.blue.gradient
+                            Color.red : Color.blue
                         )
                         .cornerRadius(16)
                     }
@@ -287,7 +287,7 @@ struct StatsView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
-                        .background(Color.red.gradient)
+                        .background(Color.red)
                         .cornerRadius(12)
                 }
             }
@@ -299,7 +299,7 @@ struct StatsView: View {
         }
     }
     
-    private var successRate: String {
+    @MainActor private var successRate: String {
         let total = viewModel.requestCount
         guard total > 0 else { return "0%" }
         

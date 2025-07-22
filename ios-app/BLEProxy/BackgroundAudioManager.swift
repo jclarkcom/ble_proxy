@@ -1,8 +1,9 @@
 import Foundation
 import AVFoundation
+import UIKit
 import os.log
 
-class BackgroundAudioManager: ObservableObject {
+class BackgroundAudioManager: NSObject, ObservableObject {
     @Published var isPlaying = false
     @Published var audioSessionActive = false
     @Published var lastError: String?

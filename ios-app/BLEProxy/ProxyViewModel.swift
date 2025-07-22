@@ -33,7 +33,7 @@ class ProxyViewModel: ObservableObject {
     }
     
     deinit {
-        stopProxy()
+        // Cleanup will be handled by system
     }
     
     // MARK: - Public Methods
@@ -234,7 +234,7 @@ class ProxyViewModel: ObservableObject {
             let compressedData = try await compressData(responseData)
             
             // Send via BLE to all connected centrals
-            for central in bleManager.connectedCentrals {
+            for central in bleManager.connectedClients {
                 bleManager.sendResponse(compressedData, to: central)
             }
             
