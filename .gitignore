@@ -45,6 +45,9 @@ distribution.cer
 ios_distribution.cer
 AuthKey_*.p8
 
+# Specific API Key file (keep for reference but don't commit)
+AuthKey_Y2AWA6648L.p8
+
 # iOS Distribution Certificate Files (generated locally)
 ios_distribution*
 
