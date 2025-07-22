@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLE Proxy Scanner & Debug Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🔗 BLE Proxy Scanner</h1>
+            <p>Debug Dashboard for Windows BLE Proxy</p>
+        </header>
+
+        <!-- Status Panel -->
+        <section class="status-panel">
+            <div class="status-grid">
+                <div class="status-card">
+                    <div class="status-icon" id="connectionIcon">🔴</div>
+                    <div class="status-content">
+                        <h3>Connection Status</h3>
+                        <span id="connectionStatus" class="status-value">Disconnected</span>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-icon" id="scanIcon">📡</div>
+                    <div class="status-content">
+                        <h3>BLE Scanner</h3>
+                        <span id="scanStatus" class="status-value">Ready</span>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-icon">🔢</div>
+                    <div class="status-content">
+                        <h3>Devices Found</h3>
+                        <span id="deviceCount" class="status-value">0</span>
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-icon">⚙️</div>
+                    <div class="status-content">
+                        <h3>Mode</h3>
+                        <span id="proxyMode" class="status-value">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Control Panel -->
+        <section class="control-panel">
+            <div class="control-buttons">
+                <button id="scanBtn" class="btn btn-primary">
+                    <span class="btn-icon">🔍</span>
+                    Start BLE Scan
+                </button>
+                
+                <button id="refreshBtn" class="btn btn-secondary">
+                    <span class="btn-icon">🔄</span>
+                    Refresh Status
+                </button>
+                
+                <button id="clearBtn" class="btn btn-outline">
+                    <span class="btn-icon">🗑️</span>
+                    Clear Results
+                </button>
+            </div>
+            
+            <div class="scan-info">
+                <p><strong>Target Service UUID:</strong> <code id="targetUUID">Loading...</code></p>
+                <p><strong>Proxy Port:</strong> <code id="proxyPort">Loading...</code></p>
+            </div>
+        </section>
+
+        <!-- Device List -->
+        <section class="device-section">
+            <div class="section-header">
+                <h2>📱 Discovered BLE Devices</h2>
+                <span id="lastScanTime" class="timestamp"></span>
+            </div>
+            
+            <div id="deviceList" class="device-list">
+                <div class="empty-state">
+                    <div class="empty-icon">📡</div>
+                    <h3>No devices found yet</h3>
+                    <p>Click "Start BLE Scan" to discover nearby Bluetooth devices</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Direct Proxy -->
+        <section class="direct-proxy-section">
+            <div class="section-header">
+                <h2>🌐 Direct Proxy Access</h2>
+                <div class="info-text">
+                    <p>Browse websites directly through the proxy</p>
+                </div>
+            </div>
+            
+            <div class="direct-proxy-controls">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="directProxyUrl" 
+                        placeholder="Enter URL (e.g., google.com)" 
+                        class="form-input"
+                    >
+                    <button id="directProxyBtn" class="btn btn-primary">
+                        <span class="btn-icon">🚀</span>
+                        Open in Proxy
+                    </button>
+                </div>
+                
+                <div class="direct-proxy-examples">
+                    <p><strong>Example URLs:</strong></p>
+                    <div class="example-links">
+                        <a href="#" class="example-link" data-url="google.com">Google</a>
+                        <a href="#" class="example-link" data-url="github.com">GitHub</a>
+                        <a href="#" class="example-link" data-url="stackoverflow.com">Stack Overflow</a>
+                        <a href="#" class="example-link" data-url="news.ycombinator.com">Hacker News</a>
+                    </div>
+                </div>
+                
+                <div class="direct-proxy-info">
+                    <p><strong>How it works:</strong></p>
+                    <ul>
+                        <li>Enter a website URL and click "Open in Proxy"</li>
+                        <li>The proxy will load the website and rewrite all links to work through the proxy</li>
+                        <li>All resources (images, CSS, JS) will be loaded through the BLE connection</li>
+                        <li>Navigate normally - all links will automatically use the proxy</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Test Proxy -->
+        <section class="test-section" id="testSection" style="display: none;">
+            <div class="section-header">
+                <h2>🧪 Test Proxy Connection</h2>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot disconnected"></span>
+                    <span>Not Connected</span>
+                </div>
+            </div>
+            
+            <div class="test-controls">
+                <div class="input-group">
+                    <input 
+                        type="url" 
+                        id="testUrl" 
+                        placeholder="https://httpbin.org/get" 
+                        class="form-input"
+                        value="https://httpbin.org/get"
+                    >
+                    <button id="testBtn" class="btn btn-primary" disabled>
+                        <span class="btn-icon">🚀</span>
+                        Test Request
+                    </button>
+                </div>
+                
+                <div class="test-options">
+                    <label>
+                        <input type="radio" name="method" value="GET" checked> GET
+                    </label>
+                    <label>
+                        <input type="radio" name="method" value="POST"> POST
+                    </label>
+                    <label>
+                        <input type="checkbox" id="followRedirects" checked> Follow Redirects
+                    </label>
+                </div>
+            </div>
+            
+            <div class="test-results" id="testResults" style="display: none;">
+                <div class="result-header">
+                    <h3>Response</h3>
+                    <div class="result-meta">
+                        <span class="status-badge" id="responseStatus"></span>
+                        <span class="timing" id="responseTiming"></span>
+                    </div>
+                </div>
+                <div class="result-content">
+                    <div class="result-headers" id="responseHeaders" style="display: none;">
+                        <h4>Headers</h4>
+                        <pre id="headersContent"></pre>
+                    </div>
+                    <div class="result-body">
+                        <h4>Body</h4>
+                        <pre id="responseBody"></pre>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- BLE Connection Log -->
+        <section class="ble-log-section">
+            <div class="section-header">
+                <h2>📟 BLE Connection Debug Log</h2>
+                <div class="log-controls">
+                    <button id="clearBleLogBtn" class="btn btn-secondary">Clear Log</button>
+                    <label>
+                        <input type="checkbox" id="autoScrollLog" checked> Auto Scroll
+                    </label>
+                    <select id="logLevelFilter" class="log-filter">
+                        <option value="all">All Messages</option>
+                        <option value="error">Errors Only</option>
+                        <option value="success">Success Only</option>
+                        <option value="info">Info Only</option>
+                        <option value="warning">Warnings Only</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="ble-log-container" id="bleLogContainer">
+                <div class="log-entry info">
+                    <span class="log-timestamp">Starting BLE Proxy Debug Log...</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Log Panel -->
+        <section class="log-section">
+            <div class="section-header">
+                <h3>📋 Activity Log</h3>
+                <button id="clearLogBtn" class="btn-mini">Clear</button>
+            </div>
+            <div id="activityLog" class="log-container">
+                <div class="log-entry info">
+                    <span class="log-time">[Loading...]</span>
+                    <span class="log-message">Initializing BLE Proxy Scanner...</span>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

@@ -5,10 +5,15 @@
   "main": "proxy.js",
   "scripts": {
     "start": "node proxy.js",
+    "start-clean": "node start.js",
+    "start-kill": "node proxy.js --kill-ports",
     "dev": "node --inspect proxy.js",
     "demo": "node demo.js",
     "mock": "cross-env MOCK_MODE=true node proxy.js",
     "mock-demo": "cross-env MOCK_MODE=true node demo.js",
+    "kill-ports": "node kill-port.js",
+    "kill-8080": "node kill-port.js 8080",
+    "kill-8081": "node kill-port.js 8081",
     "install-build-tools": "npm install -g windows-build-tools"
   },
   "dependencies": {

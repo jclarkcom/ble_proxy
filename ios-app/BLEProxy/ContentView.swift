@@ -276,6 +276,42 @@ struct StatsView: View {
                     StatCard(title: "Success Rate", value: successRate, color: .orange)
                 }
                 
+                // Version Info
+                VStack(spacing: 8) {
+                    Text("Version Information")
+                        .font(.headline)
+                    
+                    VStack(spacing: 4) {
+                        HStack {
+                            Text("Version:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(appVersion)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        HStack {
+                            Text("Build:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(buildNumber)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        HStack {
+                            Text("Build Date:")
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(buildDate)
+                                .fontWeight(.semibold)
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(16)
+                
                 Spacer()
                 
                 // Reset Button
@@ -306,6 +342,31 @@ struct StatsView: View {
         let successful = total - viewModel.errorCount
         let rate = (Double(successful) / Double(total)) * 100
         return String(format: "%.1f%%", rate)
+    }
+    
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+    }
+    
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+    }
+    
+    private var buildDate: String {
+        // Get build date from bundle info or use current date as fallback
+        if let infoPath = Bundle.main.path(forResource: "Info", ofType: "plist"),
+           let infoAttr = try? FileManager.default.attributesOfItem(atPath: infoPath),
+           let infoDate = infoAttr[.modificationDate] as? Date {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            return formatter.string(from: infoDate)
+        } else {
+            // Fallback to compile-time date
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            return formatter.string(from: Date())
+        }
     }
 }
 
