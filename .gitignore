@@ -45,8 +45,23 @@ distribution.cer
 ios_distribution.cer
 AuthKey_*.p8
 
-# Specific API Key file (keep for reference but don't commit)
-AuthKey_Y2AWA6648L.p8
+# API Keys and Credentials (NEVER COMMIT)
+*API_KEY*
+*CREDENTIAL*
+*SECRET*
+FINAL_*
+APP_STORE_CONNECT_*
+CORRECTED_*
+EXPORT_OPTIONS_*
+FIX_*
+HOW_TO_GET_*
+REGENERATE_*
+UPDATED_*
+*_base64.txt
+*_base64_*.txt
+convert_p8_to_base64.*
+*secrets-guide.*
+setup-github-secrets.*
 
 # iOS Distribution Certificate Files (generated locally)
 ios_distribution*
