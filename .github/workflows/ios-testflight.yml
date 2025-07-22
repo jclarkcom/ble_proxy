@@ -246,6 +246,11 @@ jobs:
         ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
         echo ""
         
+        # Create build directory
+        mkdir -p build
+        
+        # Build with detailed logging
+        echo "🔧 Starting xcodebuild archive..."
         xcodebuild -project BLEProxy.xcodeproj \
                    -scheme BLEProxy \
                    -sdk iphoneos \
@@ -255,7 +260,44 @@ jobs:
                    CODE_SIGN_STYLE=Manual \
                    DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM_ID" \
                    CODE_SIGN_IDENTITY="iPhone Distribution" \
-                   PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME"
+                   PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME" \
+                   -destination "generic/platform=iOS" \
+                   -allowProvisioningUpdates \
+                   SKIP_INSTALL=NO \
+                   BUILD_LIBRARY_FOR_DISTRIBUTION=YES | tee build_log.txt
+        
+        echo "✅ Archive completed"
+        
+        # Verify archive contents
+        echo "🔍 Verifying archive contents..."
+        if [ -d "$PWD/build/BLEProxy.xcarchive" ]; then
+          echo "✅ Archive directory exists"
+          echo "Archive contents:"
+          find "$PWD/build/BLEProxy.xcarchive" -name "*.app" -exec ls -la {} \;
+          
+          # Check if executable exists in the app bundle
+          APP_PATH=$(find "$PWD/build/BLEProxy.xcarchive" -name "BLEProxy.app" | head -1)
+          if [ -n "$APP_PATH" ]; then
+            echo "🔍 App bundle found at: $APP_PATH"
+            echo "App bundle contents:"
+            ls -la "$APP_PATH/"
+            
+            # Check for executable
+            if [ -f "$APP_PATH/BLEProxy" ]; then
+              echo "✅ Executable found: $APP_PATH/BLEProxy"
+              file "$APP_PATH/BLEProxy"
+            else
+              echo "❌ Executable NOT found at: $APP_PATH/BLEProxy"
+              echo "Available files in app bundle:"
+              ls -la "$APP_PATH/"
+            fi
+          else
+            echo "❌ No .app bundle found in archive"
+          fi
+        else
+          echo "❌ Archive directory not created"
+          exit 1
+        fi
 
     - name: Export IPA
       env:
