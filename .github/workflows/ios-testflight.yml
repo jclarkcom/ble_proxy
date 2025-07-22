@@ -280,8 +280,7 @@ jobs:
                    SWIFT_COMPILATION_MODE=wholemodule \
                    SWIFT_OPTIMIZATION_LEVEL=-O \
                    GCC_OPTIMIZATION_LEVEL=s \
-                   -verbose \
-                   OTHER_SWIFT_FLAGS="-Xfrontend -debug-time-compilation" 2>&1 | tee build_log.txt
+                   -verbose 2>&1 | tee build_log.txt
         
         # Check build exit code
         BUILD_EXIT_CODE=${PIPESTATUS[0]}
