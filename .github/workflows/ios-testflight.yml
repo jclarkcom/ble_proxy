@@ -249,8 +249,20 @@ jobs:
         # Create build directory
         mkdir -p build
         
-        # Build with detailed logging
-        echo "🔧 Starting xcodebuild archive..."
+        # Pre-build diagnostics
+        echo "🔍 Pre-build Environment:"
+        echo "Working directory: $(pwd)"
+        echo "Xcode version: $(xcode-select -p)"
+        echo "Available schemes:"
+        xcodebuild -project BLEProxy.xcodeproj -list
+        echo ""
+        echo "Available SDKs:"
+        xcodebuild -showsdks | grep iphoneos
+        echo ""
+        
+        # Build with maximum diagnostics
+        echo "🔧 Starting xcodebuild archive with maximum diagnostics..."
+        set -o pipefail
         xcodebuild -project BLEProxy.xcodeproj \
                    -scheme BLEProxy \
                    -sdk iphoneos \
@@ -264,38 +276,115 @@ jobs:
                    -destination "generic/platform=iOS" \
                    -allowProvisioningUpdates \
                    SKIP_INSTALL=NO \
-                   BUILD_LIBRARY_FOR_DISTRIBUTION=YES | tee build_log.txt
+                   BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+                   SWIFT_COMPILATION_MODE=wholemodule \
+                   SWIFT_OPTIMIZATION_LEVEL=-O \
+                   GCC_OPTIMIZATION_LEVEL=s \
+                   -verbose \
+                   OTHER_SWIFT_FLAGS="-Xfrontend -debug-time-compilation" 2>&1 | tee build_log.txt
+        
+        # Check build exit code
+        BUILD_EXIT_CODE=${PIPESTATUS[0]}
+        echo ""
+        echo "🔍 Build Exit Code: $BUILD_EXIT_CODE"
+        
+        if [ $BUILD_EXIT_CODE -ne 0 ]; then
+          echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+          echo "🔍 Last 50 lines of build log:"
+          tail -50 build_log.txt
+          echo ""
+          echo "🔍 Searching for Swift compilation errors:"
+          grep -i "error:" build_log.txt || echo "No explicit errors found"
+          echo ""
+          echo "🔍 Searching for compilation failures:"
+          grep -i "compilation.*failed\|fatal error\|Segmentation fault" build_log.txt || echo "No compilation failures found"
+          exit 1
+        fi
         
         echo "✅ Archive completed"
         
-        # Verify archive contents
-        echo "🔍 Verifying archive contents..."
+        # Comprehensive archive verification
+        echo "🔍 Comprehensive Archive Verification..."
         if [ -d "$PWD/build/BLEProxy.xcarchive" ]; then
           echo "✅ Archive directory exists"
-          echo "Archive contents:"
-          find "$PWD/build/BLEProxy.xcarchive" -name "*.app" -exec ls -la {} \;
+          echo ""
+          echo "🔍 Complete archive structure:"
+          find "$PWD/build/BLEProxy.xcarchive" -type f | head -20
+          echo ""
           
-          # Check if executable exists in the app bundle
+          # Find the app bundle
           APP_PATH=$(find "$PWD/build/BLEProxy.xcarchive" -name "BLEProxy.app" | head -1)
           if [ -n "$APP_PATH" ]; then
-            echo "🔍 App bundle found at: $APP_PATH"
-            echo "App bundle contents:"
+            echo "✅ App bundle found at: $APP_PATH"
+            echo ""
+            echo "🔍 Complete app bundle contents:"
             ls -la "$APP_PATH/"
+            echo ""
+            echo "🔍 App bundle size analysis:"
+            du -sh "$APP_PATH"
+            echo ""
             
-            # Check for executable
-            if [ -f "$APP_PATH/BLEProxy" ]; then
-              echo "✅ Executable found: $APP_PATH/BLEProxy"
-              file "$APP_PATH/BLEProxy"
+            # Check for executable with detailed analysis
+            EXECUTABLE_PATH="$APP_PATH/BLEProxy"
+            if [ -f "$EXECUTABLE_PATH" ]; then
+              echo "✅ Executable found: $EXECUTABLE_PATH"
+              echo "🔍 Executable details:"
+              echo "  Size: $(wc -c < "$EXECUTABLE_PATH") bytes"
+              echo "  Type: $(file "$EXECUTABLE_PATH")"
+              echo "  Permissions: $(ls -la "$EXECUTABLE_PATH" | awk '{print $1}')"
+              echo "  SHA256: $(shasum -a 256 "$EXECUTABLE_PATH" | awk '{print $1}')"
+              
+              # Verify it's a valid iOS binary
+              if file "$EXECUTABLE_PATH" | grep -q "Mach-O.*arm64"; then
+                echo "✅ Valid iOS ARM64 executable confirmed"
+              else
+                echo "⚠️  Executable exists but may not be valid iOS binary"
+                file "$EXECUTABLE_PATH"
+              fi
             else
-              echo "❌ Executable NOT found at: $APP_PATH/BLEProxy"
-              echo "Available files in app bundle:"
+              echo "❌ CRITICAL: Executable NOT found at: $EXECUTABLE_PATH"
+              echo ""
+              echo "🔍 Available files in app bundle:"
               ls -la "$APP_PATH/"
+              echo ""
+              echo "🔍 Searching for any binary files in app bundle:"
+              find "$APP_PATH" -type f -executable | head -10
+              echo ""
+              echo "🔍 Searching for any Mach-O binaries in archive:"
+              find "$PWD/build/BLEProxy.xcarchive" -type f -exec file {} \; | grep -i mach-o || echo "No Mach-O binaries found"
+              echo ""
+              echo "🔍 Last 20 lines of build log for clues:"
+              tail -20 build_log.txt
+              echo ""
+              echo "❌ BUILD ISSUE: App bundle created but executable missing"
+              exit 1
+            fi
+            
+            # Check Info.plist
+            INFO_PLIST="$APP_PATH/Info.plist"
+            if [ -f "$INFO_PLIST" ]; then
+              echo ""
+              echo "🔍 Info.plist analysis:"
+              echo "  Bundle ID: $(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$INFO_PLIST" 2>/dev/null || echo "Not found")"
+              echo "  Executable: $(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$INFO_PLIST" 2>/dev/null || echo "Not found")"
+              echo "  Version: $(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$INFO_PLIST" 2>/dev/null || echo "Not found")"
             fi
           else
-            echo "❌ No .app bundle found in archive"
+            echo "❌ CRITICAL: No .app bundle found in archive"
+            echo ""
+            echo "🔍 Archive directory contents:"
+            find "$PWD/build/BLEProxy.xcarchive" -type d | head -20
+            echo ""
+            echo "❌ BUILD ISSUE: Archive created but no app bundle"
+            exit 1
           fi
         else
-          echo "❌ Archive directory not created"
+          echo "❌ CRITICAL: Archive directory not created"
+          echo ""
+          echo "🔍 Build directory contents:"
+          ls -la "$PWD/build/" || echo "Build directory doesn't exist"
+          echo ""
+          echo "❌ BUILD ISSUE: No archive generated"
           exit 1
         fi
 
