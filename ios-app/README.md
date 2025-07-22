@@ -326,4 +326,5 @@ For issues and questions:
 
 ## License
 
-MIT License - see main project LICENSE file. 
+MIT License - see main project LICENSE file. #   B L E   P r o x y   A p p   -   R e a d y   f o r   T e s t F l i g h t  
+ 
