@@ -119,6 +119,22 @@ jobs:
         echo "🔍 Certificates in keychain:"
         security find-identity -v -p codesigning $KEYCHAIN_PATH
         
+        # Extract and show certificate details  
+        echo ""
+        echo "🔍 Certificate Details Analysis:"
+        # Get the certificate hash from the keychain
+        CERT_SHA1=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | grep "iPhone Distribution" | awk '{print $2}' | head -1)
+        if [ ! -z "$CERT_SHA1" ]; then
+          echo "Certificate SHA1: $CERT_SHA1"
+          
+          # Get detailed certificate info
+          echo "🔍 Extracting Team ID from certificate..."
+          security find-certificate -c "iPhone Distribution" -p $KEYCHAIN_PATH | openssl x509 -text -noout | grep -A 3 -B 3 "OU="
+        else
+          echo "❌ No iPhone Distribution certificate found in keychain"
+        fi
+        echo ""
+        
         # Set keychain as default
         security list-keychain -d user -s $KEYCHAIN_PATH
         echo "✅ Certificate setup complete"
@@ -222,6 +238,15 @@ jobs:
         echo "PROVISIONING_PROFILE_NAME value: '$PROVISIONING_PROFILE_NAME'"
         echo ""
         echo "🔧 Starting xcodebuild with these parameters..."
+        echo ""
+        
+        # Final verification before build
+        echo "🔍 Pre-build verification:"
+        echo "Available code signing identities:"
+        security find-identity -v -p codesigning
+        echo ""
+        echo "Available provisioning profiles:"
+        ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
         echo ""
         
         xcodebuild -project BLEProxy.xcodeproj \
