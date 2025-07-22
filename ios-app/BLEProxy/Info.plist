@@ -22,6 +22,8 @@
 	<string>BLE Proxy</string>
 	<key>CFBundleName</key>
 	<string>BLEProxy</string>
+	<key>CFBundleExecutable</key>
+	<string>BLEProxy</string>
 	<key>CFBundleIdentifier</key>
 	<string>bleproxy.innerscene.com</string>
 	<key>CFBundleVersion</key>
