@@ -6,7 +6,6 @@
 	<array>
 		<string>audio</string>
 		<string>bluetooth-peripheral</string>
-		<string>background-fetch</string>
 	</array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>This app uses Bluetooth to provide proxy services to nearby devices, allowing web browsing through this device's internet connection.</string>

@@ -19,8 +19,8 @@ on:
         type: boolean
 
 env:
-  XCODE_VERSION: '15.0'
-  IOS_VERSION: '17.0'
+  XCODE_VERSION: '15.4'
+  IOS_VERSION: '18.0'
 
 jobs:
   build-and-deploy:
@@ -38,15 +38,35 @@ jobs:
         echo "🔍 Current Xcode version:"
         xcode-select -p
         xcodebuild -version
+        echo ""
+        echo "🔍 Available iOS SDKs:"
+        xcodebuild -showsdks | grep iOS || echo "No iOS SDKs found"
     
-    - name: Select Xcode Version (if available)
+    - name: Select Best Available Xcode Version
       run: |
-        if [ -d "/Applications/Xcode_${{ env.XCODE_VERSION }}.app" ]; then
-          echo "✅ Xcode ${{ env.XCODE_VERSION }} found, selecting it"
-          sudo xcode-select -switch /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+        echo "🔍 Attempting to find newest Xcode with iOS 18+ SDK..."
+        
+        # Try Xcode versions in order of preference (newest first)
+        XCODE_VERSIONS=("16.0" "15.4" "15.3" "15.2" "15.1" "15.0" "14.3")
+        SELECTED_XCODE=""
+        
+        for version in "${XCODE_VERSIONS[@]}"; do
+          if [ -d "/Applications/Xcode_$version.app" ]; then
+            echo "✅ Found Xcode $version"
+            SELECTED_XCODE=$version
+            break
+          fi
+        done
+        
+        if [ -n "$SELECTED_XCODE" ]; then
+          echo "🎯 Selecting Xcode $SELECTED_XCODE"
+          sudo xcode-select -switch /Applications/Xcode_$SELECTED_XCODE.app/Contents/Developer
+          echo "Selected Xcode version:"
+          xcodebuild -version
+          echo "Available iOS SDKs:"
+          xcodebuild -showsdks | grep iOS
         else
-          echo "⚠️  Xcode ${{ env.XCODE_VERSION }} not found, using default Xcode"
-          echo "Current default Xcode:"
+          echo "⚠️  No specific Xcode version found, using system default"
           xcodebuild -version
         fi
 
