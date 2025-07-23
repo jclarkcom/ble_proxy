@@ -388,9 +388,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        logger.info("🔗 Central \(central.identifier) subscribed to characteristic \(characteristic.uuid)")
-        logger.info("📊 Connection details - RSSI: unknown, Services discovered: yes")
-        logger.info("✅ BLE connection established successfully")
+        logger.error("🚨 CRITICAL: Central subscribed! Connection successful!")
+        logger.error("🔗 Central: \(central.identifier.uuidString)")
+        logger.error("🔗 Characteristic: \(characteristic.uuid.uuidString)")
+        logger.error("📊 Connection details - RSSI: unknown, Services discovered: yes")
+        logger.error("✅ BLE connection established successfully")
         
         connectedCentrals.insert(central)
         DispatchQueue.main.async {
@@ -402,9 +404,12 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        logger.info("🔌 Central \(central.identifier) unsubscribed from characteristic \(characteristic.uuid)")
-        logger.info("❓ Disconnect reason: Client initiated or connection lost")
-        logger.info("🧹 Cleaning up connection data for client")
+        logger.error("🚨 CRITICAL: Central disconnected during setup!")
+        logger.error("🔌 Central: \(central.identifier.uuidString)")
+        logger.error("🔌 Characteristic: \(characteristic.uuid.uuidString)")
+        logger.error("❓ Disconnect reason: Client initiated or connection lost during service discovery")
+        logger.error("🧹 Cleaning up connection data for client")
+        logger.error("📊 Peripheral state: \(peripheral.state.rawValue)")
         
         connectedCentrals.remove(central)
         receivingData[central] = nil
@@ -436,32 +441,49 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
-        logger.info("📖 Windows client attempting service discovery!")
-        logger.info("🔍 Read request from central: \(request.central.identifier)")
-        logger.info("🔍 Requested characteristic: \(request.characteristic.uuid)")
+        logger.error("🚨 CRITICAL: Windows service discovery read request!")
+        logger.error("🔍 Central: \(request.central.identifier.uuidString)")
+        logger.error("🔍 Characteristic: \(request.characteristic.uuid.uuidString)")
+        logger.error("🔍 Offset: \(request.offset)")
+        logger.error("🔍 Peripheral state: \(peripheral.state.rawValue)")
         
         // Check which characteristic is being read
-        if request.characteristic.uuid == requestCharacteristicUUID {
-            logger.info("  → REQUEST characteristic (write-only)")
-        } else if request.characteristic.uuid == responseCharacteristicUUID {
-            logger.info("  → RESPONSE characteristic (notify/read)")
-        } else if request.characteristic.uuid == controlCharacteristicUUID {
-            logger.info("  → CONTROL characteristic (read/write/notify)")
+        if request.characteristic.uuid == self.requestCharacteristicUUID {
+            logger.error("  → REQUEST characteristic (write-only) - should deny read")
+        } else if request.characteristic.uuid == self.responseCharacteristicUUID {
+            logger.error("  → RESPONSE characteristic (notify/read) - should allow read")
+        } else if request.characteristic.uuid == self.controlCharacteristicUUID {
+            logger.error("  → CONTROL characteristic (read/write/notify) - should allow read")
         } else {
-            logger.warning("  → ⚠️ UNKNOWN characteristic!")
+            logger.error("  → ⚠️ UNKNOWN characteristic!")
+            logger.error("  Expected UUIDs:")
+            logger.error("    Request:  \(self.requestCharacteristicUUID.uuidString)")
+            logger.error("    Response: \(self.responseCharacteristicUUID.uuidString)")  
+            logger.error("    Control:  \(self.controlCharacteristicUUID.uuidString)")
         }
         
         // For response and control characteristics that support read, return empty value
         // For request characteristic (write-only), return not permitted
-        if request.characteristic.uuid == responseCharacteristicUUID || 
-           request.characteristic.uuid == controlCharacteristicUUID {
+        if request.characteristic.uuid == self.responseCharacteristicUUID || 
+           request.characteristic.uuid == self.controlCharacteristicUUID {
+            logger.error("🚨 CRITICAL: Allowing read - returning empty data")
             request.value = Data() // Return empty data for readable characteristics
             peripheral.respond(to: request, withResult: .success)
-            logger.info("✅ Responded with success (empty data)")
-        } else {
+            logger.error("✅ CRITICAL: Responded with .success (empty data)")
+        } else if request.characteristic.uuid == self.requestCharacteristicUUID {
+            logger.error("🚨 CRITICAL: Denying read for write-only characteristic")
             peripheral.respond(to: request, withResult: .readNotPermitted)
-            logger.info("❌ Responded with readNotPermitted")
+            logger.error("❌ CRITICAL: Responded with .readNotPermitted")
+        } else {
+            logger.error("🚨 CRITICAL: Unknown characteristic - returning attributeNotFound")
+            peripheral.respond(to: request, withResult: .attributeNotFound)
+            logger.error("❌ CRITICAL: Responded with .attributeNotFound")
         }
+        
+        logger.error("🔍 CRITICAL: Read request handled - current state:")
+        logger.error("   Peripheral state: \(peripheral.state.rawValue)")
+        logger.error("   Connected centrals: \(connectedCentrals.count)")
+        logger.error("   Is advertising: \(peripheral.isAdvertising)")
     }
     
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
