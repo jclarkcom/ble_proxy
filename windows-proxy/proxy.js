@@ -409,14 +409,20 @@ class BLEProxy {
       const startTime = Date.now();
 
       // Make the request through the BLE proxy by using our own sendRequest method
+      const requestId = 'test-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+      const bodyData = method === 'POST' ? JSON.stringify({ test: true }) : '';
+      const bodyBase64 = bodyData ? Buffer.from(bodyData, 'utf8').toString('base64') : '';
+      
       const requestData = {
+        id: requestId,
         method: method,
         url: url,
         headers: {
           'User-Agent': 'BLE-Proxy-Test/1.0',
           'Accept': '*/*'
         },
-        body: method === 'POST' ? JSON.stringify({ test: true }) : undefined
+        body: bodyBase64,
+        isConnect: false
       };
 
       try {
