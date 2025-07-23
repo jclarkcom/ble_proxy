@@ -310,7 +310,8 @@ class ProxyViewModel: ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let compressedData = try data.compressed(using: .lzfse)
+                    // Use gzip compression for compatibility with Windows Node.js
+                    let compressedData = try data.compressed(using: .zlib)
                     continuation.resume(returning: compressedData)
                 } catch {
                     // Fallback to no compression if compression fails
@@ -324,7 +325,8 @@ class ProxyViewModel: ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let decompressedData = try data.decompressed(using: .lzfse)
+                    // Use gzip decompression for compatibility with Windows Node.js
+                    let decompressedData = try data.decompressed(using: .zlib)
                     continuation.resume(returning: decompressedData)
                 } catch {
                     // Try without decompression (might be uncompressed data)
