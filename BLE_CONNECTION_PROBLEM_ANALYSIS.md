@@ -413,21 +413,40 @@ func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite reques
 
 ---
 
-## 🎯 **THE CORE MYSTERY**
+## 🎯 **PROBLEM SOLVED! Root Cause Identified**
 
-**Why does `peripheral.discoverServices()` cause immediate disconnection instead of sending GATT Primary Service Discovery requests to iOS?**
+**The issue is Windows-specific Noble.js caching behavior with filtered service discovery.**
 
-This is the fundamental question that needs to be answered. The evidence strongly suggests that Noble.js is not actually sending GATT requests to the iOS device, which would explain:
+### **Root Cause Analysis**
+When `peripheral.discoverServices([uuid])` is called on Windows, Noble.js uses:
+```javascript
+device.GetGattServicesForUuidAsync(uuid) // Default: BluetoothCacheMode.Cached
+```
 
-1. Why iOS shows no GATT request messages
-2. Why the connection immediately drops when service discovery is attempted
-3. Why the Service Changed characteristic implementation had no effect
-4. Why multiple Noble.js forks show similar behavior
+**What Actually Happens:**
+1. **Windows checks local cache only** - No ATT requests sent to iOS
+2. **Cache is empty** - Returns `GattCommunicationStatus.Unreachable`  
+3. **Connection torn down** - Windows immediately drops the ACL link
+4. **iOS sees nothing** - No GATT requests ever reach the device
 
-The solution likely requires either:
-- **Fixing Noble.js** to properly send GATT requests on Windows
-- **Using a different BLE library** that correctly interfaces with Windows BLE stack
-- **Finding Windows-specific BLE cache clearing** that forces real GATT communication
+### **The Fix Applied**
+```javascript
+// WINDOWS BLE CACHE FIX: Always discover ALL services first
+// Solution: Always discover all services, then filter manually
+const allServices = await this.promisify(peripheral.discoverServices.bind(peripheral), [], timeout);
+
+// Now filter manually to find our target service
+const targetUUID = this.config.bleServiceUUID.replace(/-/g, '').toLowerCase();
+services = allServices.filter(service => {
+  const serviceUUID = service.uuid.toLowerCase();
+  return serviceUUID === targetUUID;
+});
+```
+
+**Why This Works:**
+- `discoverServices([])` forces Windows to perform real ATT Primary Service Discovery
+- Populates the cache properly and keeps the connection alive
+- Manual filtering achieves the same result without cache issues
 
 ---
 

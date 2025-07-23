@@ -168,7 +168,7 @@ class BLEClient extends EventEmitter {
         this.handleGeneralDeviceDiscovery(peripheral);
       } else {
         // Original auto-connect mode
-        this.handlePeripheralDiscovery(peripheral);
+      this.handlePeripheralDiscovery(peripheral);
       }
     });
 
@@ -376,16 +376,16 @@ class BLEClient extends EventEmitter {
     }
   }
 
-    async connectToPeripheral(peripheral) {
+  async connectToPeripheral(peripheral) {
     this.peripheral = peripheral;
     
     // Define connectionInProgress at the method level to avoid scope issues
     let connectionInProgress = true;
     
     try {
-      // Set up peripheral event handlers
+    // Set up peripheral event handlers
       
-      peripheral.on('disconnect', () => {
+    peripheral.on('disconnect', () => {
         console.log(chalk.yellow('🔌 Peripheral disconnected'));
         this.bleLog('🔌 BLE device disconnected', 'warning');
         console.log(chalk.gray(`   Device: ${peripheral.advertisement?.localName || 'Unknown'} (${peripheral.address})`));
@@ -397,10 +397,10 @@ class BLEClient extends EventEmitter {
           this.bleLog('❌ Device disconnected during connection setup - this indicates an iOS app issue', 'error');
         }
         
-        this.handleDisconnection();
-      });
+      this.handleDisconnection();
+    });
 
-      peripheral.on('connect', () => {
+    peripheral.on('connect', () => {
         console.log(chalk.green('🔗 Connected to peripheral'));
         console.log(chalk.gray(`   Device: ${peripheral.advertisement?.localName || 'Unknown'} (${peripheral.address})`));
       });
@@ -423,10 +423,10 @@ class BLEClient extends EventEmitter {
       peripheral.on('characteristicsDiscover', (characteristics) => {
         console.log(chalk.green(`🔍 Noble.js characteristicsDiscover event: found ${characteristics.length} characteristics`));
         this.bleLog(`🔍 Noble.js discovered ${characteristics.length} characteristics`, 'info');
-      });
+    });
 
-      // Connect to peripheral
-      console.log(chalk.blue('Connecting to iOS device...'));
+    // Connect to peripheral
+    console.log(chalk.blue('Connecting to iOS device...'));
       this.bleLog('🔗 Starting BLE connection to iOS device...', 'info');
       console.log(chalk.gray(`  Target service UUID: ${this.config.bleServiceUUID}`));
       this.bleLog(`Target service UUID: ${this.config.bleServiceUUID}`, 'info');
@@ -434,7 +434,7 @@ class BLEClient extends EventEmitter {
       console.log(chalk.gray(`  Expected response char: ${this.config.responseCharUUID}`));
       console.log(chalk.gray(`  Expected control char: ${this.config.controlCharUUID}`));
       
-      await this.promisify(peripheral.connect.bind(peripheral));
+    await this.promisify(peripheral.connect.bind(peripheral));
       console.log(chalk.green('✓ Physical connection established'));
       this.bleLog('✅ Physical BLE connection established', 'success');
       
@@ -443,7 +443,7 @@ class BLEClient extends EventEmitter {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Discover services with retry logic
-      console.log(chalk.blue('Discovering services...'));
+    console.log(chalk.blue('Discovering services...'));
       this.bleLog('🔍 Starting service discovery...', 'info');
       console.log(chalk.gray(`  Looking for service: ${this.config.bleServiceUUID}`));
       console.log(chalk.gray(`  Peripheral state before discovery: ${peripheral.state}`));
@@ -477,16 +477,32 @@ class BLEClient extends EventEmitter {
             peripheral.services = null;
           }
           
-          // On first attempt, try with no service filter (discover all services)
-          // This sometimes helps Noble.js properly initiate service discovery
-          const serviceFilter = discoveryAttempts === 1 ? [] : [this.config.bleServiceUUID.replace(/-/g, '')];
-          console.log(chalk.gray(`    Using service filter: ${serviceFilter.length === 0 ? 'none (discover all)' : serviceFilter.join(', ')}`));
+          // WINDOWS BLE CACHE FIX: Always discover ALL services first
+          // Windows Noble.js with filtered UUIDs uses BluetoothCacheMode.Cached which never sends ATT requests
+          // This causes immediate disconnection because the cache is empty
+          // Solution: Always discover all services, then filter manually
+          console.log(chalk.blue(`🔧 WINDOWS BLE CACHE FIX: Discovering ALL services (no filter)`));
+          console.log(chalk.gray(`    Reason: Windows WinRT GetGattServicesForUuidAsync() uses cached mode by default`));
+          console.log(chalk.gray(`    This prevents ATT requests from reaching iOS device`));
           console.log(chalk.gray(`    Forcing fresh discovery (no cache)`));
           
           // Add a small delay to let Noble.js process the cache clearing
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          services = await this.promisify(peripheral.discoverServices.bind(peripheral), serviceFilter, timeout);
+          // ALWAYS use empty filter to force real ATT discovery
+          const allServices = await this.promisify(peripheral.discoverServices.bind(peripheral), [], timeout);
+          
+          // Now filter manually to find our target service
+          const targetUUID = this.config.bleServiceUUID.replace(/-/g, '').toLowerCase();
+          services = allServices.filter(service => {
+            const serviceUUID = service.uuid.toLowerCase();
+            return serviceUUID === targetUUID;
+          });
+          
+          console.log(chalk.green(`✓ Found ${allServices.length} total services, ${services.length} matching target UUID`));
+          if (allServices.length > 0) {
+            console.log(chalk.gray(`    All service UUIDs: ${allServices.map(s => s.uuid).join(', ')}`));
+          }
           
           const discoveryTime = Date.now() - discoveryStartTime;
           console.log(chalk.green(`✓ Service discovery completed in ${discoveryTime}ms`));
@@ -631,7 +647,7 @@ class BLEClient extends EventEmitter {
       }
       
       // Discover characteristics with retry logic
-      console.log(chalk.blue('Discovering characteristics...'));
+    console.log(chalk.blue('Discovering characteristics...'));
       console.log(chalk.gray(`  Service UUID: ${proxyService.uuid}`));
       console.log(chalk.gray(`  Peripheral state: ${peripheral.state}`));
       
@@ -727,11 +743,11 @@ class BLEClient extends EventEmitter {
       });
       
       console.log(chalk.blue(`Found ${characteristics.length} characteristics - mapping...`));
-      
-      // Map characteristics
+    
+    // Map characteristics
       let foundRequest = false, foundResponse = false, foundControl = false;
       
-      for (const char of characteristics) {
+    for (const char of characteristics) {
         const uuid = char.uuid.toLowerCase();
         const expectedRequest = this.config.requestCharUUID.replace(/-/g, '').toLowerCase();
         const expectedResponse = this.config.responseCharUUID.replace(/-/g, '').toLowerCase();
@@ -763,38 +779,38 @@ class BLEClient extends EventEmitter {
       console.log(chalk.gray(`  Request: ${foundRequest ? '✓' : '✗'}`));
       console.log(chalk.gray(`  Response: ${foundResponse ? '✓' : '✗'}`));
       console.log(chalk.gray(`  Control: ${foundControl ? '✓' : '✗'}`));
-      
-      if (!this.requestCharacteristic || !this.responseCharacteristic) {
+    
+    if (!this.requestCharacteristic || !this.responseCharacteristic) {
         throw new Error(`Required characteristics not found. Request: ${this.requestCharacteristic ? '✓' : '✗'}, Response: ${this.responseCharacteristic ? '✓' : '✗'}`);
-      }
-
-      // Subscribe to response characteristic
+    }
+    
+    // Subscribe to response characteristic
       console.log(chalk.blue('Setting up response notifications...'));
       console.log(chalk.gray(`  Response characteristic UUID: ${this.responseCharacteristic.uuid}`));
       console.log(chalk.gray(`  Response characteristic properties: ${JSON.stringify(this.responseCharacteristic.properties)}`));
       
-      this.responseCharacteristic.on('data', (data) => {
+    this.responseCharacteristic.on('data', (data) => {
         console.log(chalk.cyan(`📨 Received data: ${data.length} bytes`));
-        this.handleResponseData(data);
-      });
-
+      this.handleResponseData(data);
+    });
+    
       console.log(chalk.blue('Subscribing to response notifications...'));
       try {
-        await this.promisify(this.responseCharacteristic.subscribe.bind(this.responseCharacteristic));
+    await this.promisify(this.responseCharacteristic.subscribe.bind(this.responseCharacteristic));
         console.log(chalk.green('✓ Subscribed to response notifications'));
       } catch (subscribeError) {
         console.error(chalk.red(`❌ Failed to subscribe to response notifications: ${subscribeError.message}`));
         throw subscribeError;
       }
-
-      // Subscribe to control characteristic if available
-      if (this.controlCharacteristic) {
+    
+    // Subscribe to control characteristic if available
+    if (this.controlCharacteristic) {
         console.log(chalk.blue('Subscribing to control notifications...'));
         console.log(chalk.gray(`  Control characteristic UUID: ${this.controlCharacteristic.uuid}`));
         console.log(chalk.gray(`  Control characteristic properties: ${JSON.stringify(this.controlCharacteristic.properties)}`));
         
         try {
-          await this.promisify(this.controlCharacteristic.subscribe.bind(this.controlCharacteristic));
+      await this.promisify(this.controlCharacteristic.subscribe.bind(this.controlCharacteristic));
           console.log(chalk.green('✓ Subscribed to control notifications'));
         } catch (controlSubscribeError) {
           console.error(chalk.yellow(`⚠️ Failed to subscribe to control notifications: ${controlSubscribeError.message}`));
@@ -805,8 +821,8 @@ class BLEClient extends EventEmitter {
       }
 
       connectionInProgress = false;
-      this.connected = true;
-      this.connecting = false;
+    this.connected = true;
+    this.connecting = false;
       console.log(chalk.green.bold('✅ BLE connection established successfully!'));
       this.bleLog('🎉 BLE connection and setup completed successfully!', 'success');
       this.emit('connected');

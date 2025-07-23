@@ -1165,7 +1165,7 @@ class BLEProxy {
         res.write(responseBody);
       } else {
         // Normal proxy response - write as-is
-        res.writeHead(response.statusCode, response.headers);
+      res.writeHead(response.statusCode, response.headers);
       if (response.body) {
         const bodyBuffer = Buffer.from(response.body, 'base64');
         res.write(bodyBuffer);
