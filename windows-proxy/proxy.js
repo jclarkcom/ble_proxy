@@ -420,7 +420,12 @@ class BLEProxy {
       };
 
       try {
-        const response = await this.sendRequest(JSON.stringify(requestData));
+        // Check if BLE client is connected
+        if (!this.bleClient.connected) {
+          throw new Error('BLE client is not connected to iOS device');
+        }
+
+        const response = await this.bleClient.sendRequest(JSON.stringify(requestData));
         const endTime = Date.now();
         const duration = endTime - startTime;
 

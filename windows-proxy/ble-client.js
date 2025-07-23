@@ -20,6 +20,7 @@ class BLEClient extends EventEmitter {
     this.sendQueue = [];
     this.receiving = false;
     this.receivedChunks = [];
+    this.pendingRequest = null; // For request-response tracking
     
     this.normalizedServiceUUID = config.bleServiceUUID.replace(/-/g, '').toLowerCase();
     this.generalScanMode = false;
@@ -953,12 +954,34 @@ class BLEClient extends EventEmitter {
       throw new Error('Not connected to BLE device');
     }
 
-    try {
-      await this.sendChunkedData(data, this.requestCharacteristic);
-    } catch (error) {
-      console.error(chalk.red('Failed to send request:'), error.message);
-      throw error;
-    }
+    return new Promise((resolve, reject) => {
+      // Set up response handler
+      const timeout = setTimeout(() => {
+        this.pendingRequest = null;
+        reject(new Error('Request timeout after 30 seconds'));
+      }, 30000);
+
+      this.pendingRequest = {
+        resolve: (response) => {
+          clearTimeout(timeout);
+          this.pendingRequest = null;
+          resolve(response);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          this.pendingRequest = null;
+          reject(error);
+        }
+      };
+
+      // Send the request
+      this.sendChunkedData(data, this.requestCharacteristic).catch(error => {
+        clearTimeout(timeout);
+        this.pendingRequest = null;
+        console.error(chalk.red('Failed to send request:'), error.message);
+        reject(error);
+      });
+    });
   }
 
   async sendChunkedData(data, characteristic) {
@@ -1024,7 +1047,15 @@ class BLEClient extends EventEmitter {
       this.receivedChunks = [];
       this.receivedLength = 0;
       
-      // Emit the response
+      // Convert buffer to string for response
+      const responseString = fullData.toString('utf8');
+      
+      // Resolve pending request if exists
+      if (this.pendingRequest) {
+        this.pendingRequest.resolve(responseString);
+      }
+      
+      // Also emit the response for other listeners
       this.emit('response', fullData);
     }
   }
