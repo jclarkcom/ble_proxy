@@ -153,7 +153,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
                     logger.info("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))")
                 }
             } else {
-                logger.info("  • \(key as String): \(value)")
+                logger.info("  • \(key): \(value)")
             }
         }
         
