@@ -437,25 +437,31 @@ class BLEProxy {
         
         console.log(chalk.green(`✅ Test request completed in ${duration}ms`));
 
-        // Decompress and parse response
+        // Decompress and parse response using inflateRaw (which works for iOS)
         let responseData;
         try {
           // Convert response to Buffer for decompression
-          // The response might be a string representation of binary data
           let responseBuffer;
           if (typeof response === 'string') {
-            // Try to convert string back to buffer (it might be base64 or binary string)
-            try {
-              responseBuffer = Buffer.from(response, 'binary');
-            } catch (e) {
-              responseBuffer = Buffer.from(response, 'utf8');
-            }
+            responseBuffer = Buffer.from(response, 'binary');
           } else {
             responseBuffer = response;
           }
           
-          const decompressedResponse = await this.decompressData(responseBuffer);
+          // Use inflateRaw since that's what works with iOS compression
+          const decompressedResponse = await new Promise((resolve, reject) => {
+            const zlib = require('zlib');
+            zlib.inflateRaw(responseBuffer, (err, decompressed) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve(decompressed.toString());
+              }
+            });
+          });
+          
           responseData = JSON.parse(decompressedResponse);
+          console.log(chalk.green(`✅ Successfully decompressed and parsed test response`));
         } catch (decompressError) {
           console.log(chalk.yellow(`BLE response decompression error: ${decompressError.message}`));
           // Try parsing as direct JSON if decompression fails
@@ -1274,18 +1280,18 @@ class BLEProxy {
       console.log(chalk.blue(`First 20 bytes (hex): ${data.subarray(0, 20).toString('hex')}`));
       console.log(chalk.blue(`First 20 bytes (utf8): ${data.subarray(0, 20).toString('utf8').replace(/[^\x20-\x7E]/g, '?')}`));
       
-      // Try zlib inflate first (iOS should use .zlib compression)
-      zlib.inflate(data, (err, decompressed) => {
+      // Try inflateRaw first since that's what works with iOS
+      zlib.inflateRaw(data, (err, decompressed) => {
         if (err) {
-          console.log(chalk.yellow(`zlib.inflate failed: ${err.message}`));
-          // Fallback to gunzip if inflate fails
-          zlib.gunzip(data, (err2, decompressed2) => {
+          console.log(chalk.yellow(`zlib.inflateRaw failed: ${err.message}`));
+          // Fallback to zlib inflate
+          zlib.inflate(data, (err2, decompressed2) => {
             if (err2) {
-              console.log(chalk.yellow(`zlib.gunzip failed: ${err2.message}`));
-              // Try deflate (raw deflate without headers)
-              zlib.inflateRaw(data, (err3, decompressed3) => {
+              console.log(chalk.yellow(`zlib.inflate failed: ${err2.message}`));
+              // Try gunzip
+              zlib.gunzip(data, (err3, decompressed3) => {
                 if (err3) {
-                  console.log(chalk.yellow(`zlib.inflateRaw failed: ${err3.message}`));
+                  console.log(chalk.yellow(`zlib.gunzip failed: ${err3.message}`));
                   // Try unzip (auto-detect)
                   zlib.unzip(data, (err4, decompressed4) => {
                     if (err4) {
@@ -1304,17 +1310,17 @@ class BLEProxy {
                     }
                   });
                 } else {
-                  console.log(chalk.green(`Successfully decompressed with zlib.inflateRaw`));
+                  console.log(chalk.green(`Successfully decompressed with zlib.gunzip`));
                   resolve(decompressed3.toString());
                 }
               });
             } else {
-              console.log(chalk.green(`Successfully decompressed with zlib.gunzip`));
+              console.log(chalk.green(`Successfully decompressed with zlib.inflate`));
               resolve(decompressed2.toString());
             }
           });
         } else {
-          console.log(chalk.green(`Successfully decompressed with zlib.inflate`));
+          console.log(chalk.green(`Successfully decompressed with zlib.inflateRaw`));
           resolve(decompressed.toString());
         }
       });
