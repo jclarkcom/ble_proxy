@@ -376,6 +376,54 @@ class BLEClient extends EventEmitter {
     }
   }
 
+  // Event-based service discovery for Windows Noble.js reliability
+  async discoverServicesEventBased(peripheral, serviceUUIDs = [], timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        peripheral.removeAllListeners('servicesDiscover');
+        reject(new Error(`Service discovery timed out after ${timeout}ms`));
+      }, timeout);
+
+      // Listen for the servicesDiscover event
+      const onServicesDiscover = (services) => {
+        clearTimeout(timer);
+        peripheral.removeListener('servicesDiscover', onServicesDiscover);
+        console.log(chalk.green(`✅ Event-based service discovery completed: ${services.length} services`));
+        resolve(services);
+      };
+
+      peripheral.once('servicesDiscover', onServicesDiscover);
+      
+      // Start the discovery
+      console.log(chalk.blue(`🔍 Starting event-based service discovery...`));
+      peripheral.discoverServices(serviceUUIDs);
+    });
+  }
+
+  // Event-based characteristic discovery for Windows Noble.js reliability
+  async discoverCharacteristicsEventBased(service, characteristicUUIDs = [], timeout = 10000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        service.removeAllListeners('characteristicsDiscover');
+        reject(new Error(`Characteristic discovery timed out after ${timeout}ms`));
+      }, timeout);
+
+      // Listen for the characteristicsDiscover event
+      const onCharacteristicsDiscover = (characteristics) => {
+        clearTimeout(timer);
+        service.removeListener('characteristicsDiscover', onCharacteristicsDiscover);
+        console.log(chalk.green(`✅ Event-based characteristic discovery completed: ${characteristics.length} characteristics`));
+        resolve(characteristics);
+      };
+
+      service.once('characteristicsDiscover', onCharacteristicsDiscover);
+      
+      // Start the discovery
+      console.log(chalk.blue(`🔍 Starting event-based characteristic discovery...`));
+      service.discoverCharacteristics(characteristicUUIDs);
+    });
+  }
+
   async connectToPeripheral(peripheral) {
     this.peripheral = peripheral;
     
@@ -490,7 +538,8 @@ class BLEClient extends EventEmitter {
           await new Promise(resolve => setTimeout(resolve, 100));
           
           // ALWAYS use empty filter to force real ATT discovery
-          const allServices = await this.promisify(peripheral.discoverServices.bind(peripheral), [], timeout);
+          // Use event-based approach since Windows Noble.js callbacks are unreliable
+          const allServices = await this.discoverServicesEventBased(peripheral, [], timeout);
           
           // Now filter manually to find our target service
           const targetUUID = this.config.bleServiceUUID.replace(/-/g, '').toLowerCase();
@@ -591,7 +640,7 @@ class BLEClient extends EventEmitter {
         try {
           // Discover characteristics in GAP service
           console.log(chalk.blue('🔍 Discovering GAP service characteristics...'));
-          const gapCharacteristics = await this.promisify(gapService.discoverCharacteristics.bind(gapService), [], 10000);
+          const gapCharacteristics = await this.discoverCharacteristicsEventBased(gapService, [], 10000);
           
           if (gapCharacteristics && gapCharacteristics.length > 0) {
             console.log(chalk.gray(`  Found ${gapCharacteristics.length} GAP characteristics:`));
@@ -684,7 +733,7 @@ class BLEClient extends EventEmitter {
           // Add a small delay to let Noble.js process the cache clearing
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          characteristics = await this.promisify(proxyService.discoverCharacteristics.bind(proxyService), [], timeout);
+                      characteristics = await this.discoverCharacteristicsEventBased(proxyService, [], timeout);
           
           const charDiscoveryTime = Date.now() - charDiscoveryStartTime;
           console.log(chalk.green(`✓ Characteristic discovery completed in ${charDiscoveryTime}ms`));
