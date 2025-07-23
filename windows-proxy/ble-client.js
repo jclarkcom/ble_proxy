@@ -13,6 +13,7 @@ class BLEClient extends EventEmitter {
     this.controlCharacteristic = null;
     this.connected = false;
     this.connecting = false;
+    this.connectionInProgress = false;
     this.reconnectTimer = null;
     
     // BLE packet size limitations
@@ -428,8 +429,8 @@ class BLEClient extends EventEmitter {
   async connectToPeripheral(peripheral) {
     this.peripheral = peripheral;
     
-    // Define connectionInProgress at the method level to avoid scope issues
-    let connectionInProgress = true;
+    // Set connection in progress flag
+    this.connectionInProgress = true;
     
     try {
     // Set up peripheral event handlers
@@ -439,9 +440,9 @@ class BLEClient extends EventEmitter {
         this.bleLog('🔌 BLE device disconnected', 'warning');
         console.log(chalk.gray(`   Device: ${peripheral.advertisement?.localName || 'Unknown'} (${peripheral.address})`));
         console.log(chalk.gray(`   Connection state: connected=${this.connected}, connecting=${this.connecting}`));
-        console.log(chalk.gray(`   Connection in progress: ${connectionInProgress}`));
+        console.log(chalk.gray(`   Connection in progress: ${this.connectionInProgress}`));
         
-        if (connectionInProgress) {
+        if (this.connectionInProgress) {
           console.log(chalk.red('❌ Disconnection occurred during connection setup!'));
           this.bleLog('❌ Device disconnected during connection setup - this indicates an iOS app issue', 'error');
         }
@@ -870,7 +871,7 @@ class BLEClient extends EventEmitter {
         console.log(chalk.gray('ℹ️ No control characteristic available'));
       }
 
-      connectionInProgress = false;
+      this.connectionInProgress = false;
     this.connected = true;
     this.connecting = false;
       console.log(chalk.green.bold('✅ BLE connection established successfully!'));
@@ -882,7 +883,7 @@ class BLEClient extends EventEmitter {
         console.error(chalk.red(`   Error: ${error.message}`));
         console.error(chalk.red(`   Stack: ${error.stack}`));
       
-      connectionInProgress = false;
+      this.connectionInProgress = false;
       this.connecting = false;
       
       // Reset characteristics
@@ -910,6 +911,7 @@ class BLEClient extends EventEmitter {
   handleDisconnection() {
     this.connected = false;
     this.connecting = false;
+    this.connectionInProgress = false;
     this.peripheral = null;
     this.requestCharacteristic = null;
     this.responseCharacteristic = null;
@@ -1013,7 +1015,7 @@ class BLEClient extends EventEmitter {
     const totalLength = data.length;
     const header = Buffer.alloc(4);
     header.writeUInt32LE(totalLength, 0);
-   
+    
     // Combine header and data
     const fullData = Buffer.concat([header, data]);
     
