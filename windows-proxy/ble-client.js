@@ -955,9 +955,24 @@ class BLEClient extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
+      const requestStartTime = Date.now();
+      console.log(chalk.blue(`🚀 Starting BLE request at ${new Date().toISOString()}`));
+      console.log(chalk.gray(`   Request size: ${typeof data === 'string' ? data.length : data.length} bytes`));
+      
       // Set up response handler
       const timeout = setTimeout(() => {
         this.pendingRequest = null;
+        const duration = Date.now() - requestStartTime;
+        console.log(chalk.red(`❌ BLE request timeout after ${duration}ms`));
+        console.log(chalk.red(`   Started at: ${new Date(requestStartTime).toISOString()}`));
+        console.log(chalk.red(`   Timed out at: ${new Date().toISOString()}`));
+        console.log(chalk.red(`   Expected response within: 30000ms`));
+        console.log(chalk.yellow(`🔍 Debugging info:`));
+        console.log(chalk.yellow(`   - Request was sent successfully`));
+        console.log(chalk.yellow(`   - iOS app should have received ${typeof data === 'string' ? data.length : data.length} bytes`));
+        console.log(chalk.yellow(`   - iOS app should process HTTP request and send response`));
+        console.log(chalk.yellow(`   - Windows client should receive BLE notification with response`));
+        console.log(chalk.yellow(`   - Check iOS app logs to see if request was received and processed`));
         reject(new Error('Request timeout after 30 seconds'));
       }, 30000);
 
@@ -965,11 +980,16 @@ class BLEClient extends EventEmitter {
         resolve: (response) => {
           clearTimeout(timeout);
           this.pendingRequest = null;
+          const duration = Date.now() - requestStartTime;
+          console.log(chalk.green(`✅ BLE request completed in ${duration}ms`));
+          console.log(chalk.gray(`   Response size: ${response.length} bytes`));
           resolve(response);
         },
         reject: (error) => {
           clearTimeout(timeout);
           this.pendingRequest = null;
+          const duration = Date.now() - requestStartTime;
+          console.log(chalk.red(`❌ BLE request failed after ${duration}ms: ${error.message}`));
           reject(error);
         }
       };
@@ -978,10 +998,11 @@ class BLEClient extends EventEmitter {
       const dataBuffer = typeof data === 'string' ? Buffer.from(data, 'utf8') : data;
       
       // Send the request
+      console.log(chalk.blue(`📤 Sending BLE request...`));
       this.sendChunkedData(dataBuffer, this.requestCharacteristic).catch(error => {
         clearTimeout(timeout);
         this.pendingRequest = null;
-        console.error(chalk.red('Failed to send request:'), error.message);
+      console.error(chalk.red('Failed to send request:'), error.message);
         reject(error);
       });
     });
@@ -992,27 +1013,46 @@ class BLEClient extends EventEmitter {
     const totalLength = data.length;
     const header = Buffer.alloc(4);
     header.writeUInt32LE(totalLength, 0);
-    
+   
     // Combine header and data
     const fullData = Buffer.concat([header, data]);
+    
+    console.log(chalk.blue(`📤 Starting chunked data transmission:`));
+    console.log(chalk.gray(`   Total data size: ${totalLength} bytes`));
+    console.log(chalk.gray(`   With header: ${fullData.length} bytes`));
+    console.log(chalk.gray(`   Chunk size: ${this.maxChunkSize} bytes`));
+    console.log(chalk.gray(`   Expected chunks: ${Math.ceil(fullData.length / this.maxChunkSize)}`));
+    console.log(chalk.yellow(`🔄 Using write-with-response for flow control + 20ms delays`));
+    
+    let chunkIndex = 0;
+    const totalChunks = Math.ceil(fullData.length / this.maxChunkSize);
     
     // Send in chunks
     for (let i = 0; i < fullData.length; i += this.maxChunkSize) {
       const chunk = fullData.slice(i, i + this.maxChunkSize);
+      chunkIndex++;
+      
+      console.log(chalk.cyan(`📦 Sending chunk ${chunkIndex}/${totalChunks}: ${chunk.length} bytes (offset ${i})`));
       
       try {
-        await this.promisify(characteristic.write.bind(characteristic), [chunk, false]);
+        const writeStartTime = Date.now();
+        await this.promisify(characteristic.write.bind(characteristic), [chunk, true]); // Use write WITH response for flow control
+        const writeTime = Date.now() - writeStartTime;
+        console.log(chalk.green(`✓ Chunk ${chunkIndex} acknowledged by iOS in ${writeTime}ms`));
         
-        // Small delay between chunks to prevent overwhelming the peripheral
+        // Shorter delay since we now have flow control via acknowledgments
         if (i + this.maxChunkSize < fullData.length) {
-          await this.sleep(10);
+          console.log(chalk.gray(`   Waiting 20ms before next chunk (with flow control)...`));
+          await this.sleep(20);
         }
       } catch (error) {
-        throw new Error(`Failed to send chunk at offset ${i}: ${error.message}`);
+        console.log(chalk.red(`❌ Failed to send chunk ${chunkIndex}: ${error.message}`));
+        throw new Error(`Failed to send chunk ${chunkIndex} at offset ${i}: ${error.message}`);
       }
     }
     
-    console.log(chalk.gray(`Sent ${fullData.length} bytes in ${Math.ceil(fullData.length / this.maxChunkSize)} chunks`));
+    console.log(chalk.green(`✅ All chunks sent successfully: ${fullData.length} bytes in ${totalChunks} chunks`));
+    console.log(chalk.yellow(`🔍 If iOS only received first chunk, the issue is iOS not processing subsequent BLE writes`));
   }
 
   handleResponseData(data) {
@@ -1058,7 +1098,7 @@ class BLEClient extends EventEmitter {
         // to avoid double-processing by both Promise and event handlers
       } else {
         // Only emit the response for other listeners when no pending request
-        this.emit('response', fullData);
+      this.emit('response', fullData);
       }
     }
   }
