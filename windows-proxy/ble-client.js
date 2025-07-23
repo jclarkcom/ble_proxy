@@ -95,11 +95,14 @@ class BLEClient extends EventEmitter {
   }
 
   startScanning() {
-    if (this.connected || this.connecting) return;
+    if (this.connected || this.connecting) {
+      console.log(chalk.yellow('⏳ Scanning blocked: already connected or connecting'));
+      return;
+    }
     
     console.log(chalk.blue('Scanning for BLE Proxy iOS device...'));
     
-    // Use normalized 128-bit UUID without dashes per noble expectations
+    // Use normalized 128-bit UUID without dashes per noble expectations  
     noble.startScanning([this.normalizedServiceUUID], false);
     
     // Also scan for devices with local name
@@ -114,6 +117,11 @@ class BLEClient extends EventEmitter {
   async startScan() {
     if (noble.state !== 'poweredOn') {
       throw new Error('BLE adapter not ready');
+    }
+    
+    if (this.connected || this.connecting) {
+      console.log(chalk.yellow('⏳ General scan blocked: already connected or connecting'));
+      return;
     }
     
     console.log(chalk.blue('Starting general BLE device scan...'));
@@ -204,6 +212,13 @@ class BLEClient extends EventEmitter {
     const deviceName = peripheral.advertisement.localName || 'Unknown';
     const serviceUUIDs = (peripheral.advertisement.serviceUuids || []).map(u => u.replace(/-/g, '').toLowerCase());
     
+    // Debug UUID comparison
+    if (deviceName.includes('BLE-Proxy') && serviceUUIDs.length > 0) {
+      console.log(chalk.gray(`   Raw advertised UUIDs: ${JSON.stringify(peripheral.advertisement.serviceUuids || [])}`));
+      console.log(chalk.gray(`   Normalized advertised UUIDs: ${JSON.stringify(serviceUUIDs)}`));
+      console.log(chalk.gray(`   Looking for normalized UUID: ${this.normalizedServiceUUID}`));
+    }
+    
     // Check if this is our iOS proxy device
     const hasOurService = serviceUUIDs.includes(this.normalizedServiceUUID);
     const hasProxyName = deviceName.includes('BLE-Proxy') || deviceName.includes('Proxy');
@@ -223,9 +238,10 @@ class BLEClient extends EventEmitter {
       return;
     }
     
-    this.connecting = true;
-    this.stopScanning();
+    // Immediately stop scanning and set connecting state to prevent race conditions
     console.log(chalk.blue('🔄 Starting connection attempt...'));
+    this.stopScanning();
+    this.connecting = true;
     
     try {
       await this.connectToPeripheral(peripheral);
@@ -457,6 +473,7 @@ class BLEClient extends EventEmitter {
         console.error(chalk.red(`   Error: ${error.message}`));
         console.error(chalk.red(`   Stack: ${error.stack}`));
       
+      connectionInProgress = false;
       this.connecting = false;
       
       // Reset characteristics
