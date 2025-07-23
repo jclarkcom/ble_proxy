@@ -549,10 +549,67 @@ class BLEClient extends EventEmitter {
       });
       
       if (!proxyService) {
-        throw new Error(`Proxy service not found. Expected: ${this.config.bleServiceUUID}, found: ${services.map(s => s.uuid).join(', ')}`);
+        throw new Error(`Proxy service not found. Available services: ${services.map(s => s.uuid).join(', ')}`);
       }
       
       console.log(chalk.green(`✓ Found proxy service: ${proxyService.uuid}`));
+      this.bleLog(`✓ Found proxy service: ${proxyService.uuid}`, 'success');
+      
+      // Also look for GAP service (1801) with Service Changed characteristic (2A05)
+      // This is crucial for forcing iOS cache invalidation
+      console.log(chalk.blue('🔍 Looking for GAP service (1801) with Service Changed characteristic...'));
+      const gapService = services.find(service => service.uuid.toLowerCase() === '1801');
+      
+      if (gapService) {
+        console.log(chalk.green(`✓ Found GAP service: ${gapService.uuid}`));
+        this.bleLog(`✓ Found GAP service for cache invalidation`, 'success');
+        
+        try {
+          // Discover characteristics in GAP service
+          console.log(chalk.blue('🔍 Discovering GAP service characteristics...'));
+          const gapCharacteristics = await this.promisify(gapService.discoverCharacteristics.bind(gapService), [], 10000);
+          
+          if (gapCharacteristics && gapCharacteristics.length > 0) {
+            console.log(chalk.gray(`  Found ${gapCharacteristics.length} GAP characteristics:`));
+            gapCharacteristics.forEach((char, index) => {
+              console.log(chalk.gray(`    GAP Char ${index}: ${char.uuid} (properties: ${char.properties.join(', ')})`));
+            });
+            
+            // Look for Service Changed characteristic (2A05)
+            const serviceChangedChar = gapCharacteristics.find(char => char.uuid.toLowerCase() === '2a05');
+            
+            if (serviceChangedChar) {
+              console.log(chalk.green(`✅ Found Service Changed characteristic: ${serviceChangedChar.uuid}`));
+              this.bleLog(`✅ Found Service Changed characteristic - enabling cache invalidation`, 'success');
+              
+              // Subscribe to Service Changed characteristic
+              // This will trigger iOS to send Service Changed indication and refresh cache
+              console.log(chalk.blue('📡 Subscribing to Service Changed characteristic...'));
+              await this.promisify(serviceChangedChar.subscribe.bind(serviceChangedChar), [], 5000);
+              console.log(chalk.green('✅ Successfully subscribed to Service Changed characteristic'));
+              this.bleLog('✅ Subscribed to Service Changed - iOS should refresh GATT cache now', 'success');
+              
+              // Set up notification handler
+              serviceChangedChar.on('data', (data) => {
+                console.log(chalk.green(`🔄 Service Changed indication received: ${data.toString('hex')}`));
+                this.bleLog('🔄 Service Changed indication received - iOS cache refreshed', 'info');
+              });
+              
+            } else {
+              console.log(chalk.yellow('⚠️ Service Changed characteristic (2A05) not found in GAP service'));
+              this.bleLog('⚠️ Service Changed characteristic not found - cache invalidation unavailable', 'warning');
+            }
+          } else {
+            console.log(chalk.yellow('⚠️ No characteristics found in GAP service'));
+          }
+        } catch (gapError) {
+          console.log(chalk.yellow(`⚠️ Failed to discover GAP service characteristics: ${gapError.message}`));
+          this.bleLog(`⚠️ GAP service discovery failed: ${gapError.message}`, 'warning');
+        }
+      } else {
+        console.log(chalk.yellow('⚠️ GAP service (1801) not found - Service Changed unavailable'));
+        this.bleLog('⚠️ GAP service not found - cache invalidation unavailable', 'warning');
+      }
       
       // Wait a moment before characteristic discovery
       await new Promise(resolve => setTimeout(resolve, 500));

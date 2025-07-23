@@ -451,11 +451,20 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             uiLog("📡 BLE advertising started successfully", level: .success)
             uiLog("🎯 Device name: BLE-Proxy", level: .info)
             uiLog("🔑 Service UUID: \(self.serviceUUID.uuidString)", level: .info)
+            uiLog("🔑 GAP Service UUID: \(self.gapServiceUUID.uuidString)", level: .info)
             uiLog("👀 Waiting for Windows client to discover and connect...", level: .info)
             DispatchQueue.main.async {
                 self.isAdvertising = true
                 self.lastError = nil
             }
+            
+            // Pre-emptively trigger Service Changed indication
+            // This ensures cache invalidation even if Noble.js has subscription issues
+            uiLog("🔄 Pre-emptively triggering Service Changed to prepare for cache invalidation", level: .info)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                self.triggerServiceChanged()
+            }
+            
             delegate?.peripheralManagerDidStartAdvertising(self)
         }
     }
@@ -482,6 +491,13 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             DispatchQueue.main.async {
                 self.isConnected = true
                 self.connectionCount = self.connectedCentrals.count
+            }
+            
+            // FORCE Service Changed indication for ANY connection
+            // This bypasses the need for explicit subscription due to Noble.js cache issues
+            uiLog("🔄 Auto-triggering Service Changed indication to force cache refresh", level: .info)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.triggerServiceChanged()
             }
             
             delegate?.peripheralManager(self, didConnect: central)
