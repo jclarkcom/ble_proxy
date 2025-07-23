@@ -1269,9 +1269,17 @@ class BLEProxy {
 
   async decompressData(data) {
     return new Promise((resolve, reject) => {
-      zlib.gunzip(data, (err, decompressed) => {
-        if (err) reject(err);
-        else resolve(decompressed.toString());
+      // Try zlib inflate first (iOS uses .zlib compression)
+      zlib.inflate(data, (err, decompressed) => {
+        if (err) {
+          // Fallback to gunzip if inflate fails
+          zlib.gunzip(data, (err2, decompressed2) => {
+            if (err2) reject(err2);
+            else resolve(decompressed2.toString());
+          });
+        } else {
+          resolve(decompressed.toString());
+        }
       });
     });
   }
