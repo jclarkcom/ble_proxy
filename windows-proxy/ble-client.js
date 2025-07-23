@@ -974,8 +974,11 @@ class BLEClient extends EventEmitter {
         }
       };
 
+      // Convert string to Buffer if needed
+      const dataBuffer = typeof data === 'string' ? Buffer.from(data, 'utf8') : data;
+      
       // Send the request
-      this.sendChunkedData(data, this.requestCharacteristic).catch(error => {
+      this.sendChunkedData(dataBuffer, this.requestCharacteristic).catch(error => {
         clearTimeout(timeout);
         this.pendingRequest = null;
         console.error(chalk.red('Failed to send request:'), error.message);
