@@ -23,17 +23,27 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     @Published var lastError: String?
     
     // MARK: - BLE Configuration
-    private let serviceUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcdef")
-    private let requestCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd01")
-    private let responseCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd02")
-    private let controlCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd03")
+    // Service and characteristic UUIDs
+    private let serviceUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCDEF")
+    private let requestCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD01")
+    private let responseCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD02")
+    private let controlCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD03")
     
-    // MARK: - Core Bluetooth
-    private var peripheralManager: CBPeripheralManager!
-    private var proxyService: CBMutableService!
+    // Generic Attribute Profile (GAP) service and Service Changed characteristic
+    // This forces iOS clients to refresh their GATT cache
+    private let gapServiceUUID = CBUUID(string: "1801") // Generic Attribute Profile
+    private let serviceChangedCharacteristicUUID = CBUUID(string: "2A05") // Service Changed
+    
+    // Characteristics and services
     private var requestCharacteristic: CBMutableCharacteristic!
     private var responseCharacteristic: CBMutableCharacteristic!
     private var controlCharacteristic: CBMutableCharacteristic!
+    private var serviceChangedCharacteristic: CBMutableCharacteristic!
+    private var proxyService: CBMutableService!
+    private var gapService: CBMutableService!
+    
+    // MARK: - Core Bluetooth
+    private var peripheralManager: CBPeripheralManager!
     
     // MARK: - Data Management
     private var connectedCentrals: Set<CBCentral> = []
@@ -102,7 +112,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("🔧 Setting up BLE service and characteristics...", level: .info)
         uiLog("🆔 Service UUID: \(self.serviceUUID.uuidString)", level: .info)
         
-        // Create characteristics
+        // Create main proxy service characteristics
         uiLog("📝 Creating REQUEST characteristic...", level: .info)
         requestCharacteristic = CBMutableCharacteristic(
             type: requestCharacteristicUUID,
@@ -133,8 +143,19 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("  • UUID: \(self.controlCharacteristicUUID.uuidString)", level: .info)
         uiLog("  • Properties: read, write, notify", level: .info)
         
-        // Create service
-        uiLog("🏗️ Creating BLE service...", level: .info)
+        // Create Service Changed characteristic for cache invalidation
+        uiLog("📝 Creating SERVICE CHANGED characteristic (for cache invalidation)...", level: .info)
+        serviceChangedCharacteristic = CBMutableCharacteristic(
+            type: serviceChangedCharacteristicUUID,
+            properties: [.indicate],
+            value: nil,
+            permissions: []
+        )
+        uiLog("  • UUID: \(self.serviceChangedCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: indicate (forces iOS cache refresh)", level: .info)
+        
+        // Create main proxy service
+        uiLog("🏗️ Creating main BLE proxy service...", level: .info)
         proxyService = CBMutableService(type: serviceUUID, primary: true)
         proxyService.characteristics = [
             requestCharacteristic,
@@ -142,12 +163,25 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             controlCharacteristic
         ]
         
-        uiLog("✅ Service created with \(self.proxyService.characteristics?.count ?? 0) characteristics", level: .success)
+        // Create Generic Attribute Profile (GAP) service
+        uiLog("🏗️ Creating GAP service (Generic Attribute Profile)...", level: .info)
+        gapService = CBMutableService(type: gapServiceUUID, primary: true)
+        gapService.characteristics = [
+            serviceChangedCharacteristic
+        ]
         
-        // Add service
-        uiLog("➕ Adding service to peripheral manager...", level: .info)
+        uiLog("✅ Main service created with \(self.proxyService.characteristics?.count ?? 0) characteristics", level: .success)
+        uiLog("✅ GAP service created with Service Changed characteristic", level: .success)
+        
+        // Add both services
+        uiLog("➕ Adding main proxy service to peripheral manager...", level: .info)
         peripheralManager.add(proxyService)
-        uiLog("✅ BLE service and characteristics setup completed", level: .success)
+        
+        uiLog("➕ Adding GAP service to peripheral manager...", level: .info)
+        peripheralManager.add(gapService)
+        
+        uiLog("✅ BLE services and characteristics setup completed", level: .success)
+        uiLog("🔄 Service Changed characteristic will force iOS cache refresh", level: .info)
     }
     
     // MARK: - Public Methods
@@ -163,33 +197,50 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("🏷️ Device name: BLE-Proxy", level: .info)
         
         let advertisementData: [String: Any] = [
-            CBAdvertisementDataServiceUUIDsKey: [serviceUUID],
+            CBAdvertisementDataServiceUUIDs: [serviceUUID, gapServiceUUID],
             CBAdvertisementDataLocalNameKey: "BLE-Proxy"
         ]
         
         // Log the advertisement data being sent
-        uiLog("📤 Advertisement data:", level: .info)
-        for (key, value) in advertisementData {
-            if key == CBAdvertisementDataServiceUUIDsKey {
-                if let uuids = value as? [CBUUID] {
-                    uiLog("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))", level: .info)
-                }
-            } else {
-                uiLog("  • \(key): \(String(describing: value))", level: .info)
-            }
-        }
+        uiLog("📋 Advertisement data:", level: .info)
+        uiLog("  • Services: [\(self.serviceUUID.uuidString), \(self.gapServiceUUID.uuidString)]", level: .info)
+        uiLog("  • Local Name: BLE-Proxy", level: .info)
         
         peripheralManager.startAdvertising(advertisementData)
-        uiLog("Started advertising BLE proxy service", level: .success)
     }
     
     func stopAdvertising() {
+        uiLog("🛑 Stopping BLE advertisement...", level: .info)
         peripheralManager.stopAdvertising()
-        DispatchQueue.main.async {
-            self.isAdvertising = false
+        uiLog("✅ Advertisement stopped", level: .success)
+    }
+    
+    // Force iOS clients to refresh their GATT cache
+    func triggerServiceChanged() {
+        guard peripheralManager.state == .poweredOn else {
+            uiLog("Cannot trigger Service Changed - Bluetooth not powered on", level: .warning)
+            return
         }
-        uiLog("Stopped advertising", level: .info)
-        delegate?.peripheralManagerDidStopAdvertising(self)
+        
+        uiLog("🔄 Triggering Service Changed indication to refresh iOS cache...", level: .info)
+        
+        // Create indication data (start handle: 0x0001, end handle: 0xFFFF)
+        // This indicates that all services may have changed
+        let serviceChangedData = Data([0x01, 0x00, 0xFF, 0xFF])
+        
+        // Send indication to all subscribed centrals
+        let success = peripheralManager.updateValue(
+            serviceChangedData,
+            for: serviceChangedCharacteristic,
+            onSubscribedCentrals: nil
+        )
+        
+        if success {
+            uiLog("✅ Service Changed indication sent successfully", level: .success)
+            uiLog("🔄 iOS clients should now refresh their GATT cache", level: .info)
+        } else {
+            uiLog("⚠️ Failed to send Service Changed indication", level: .warning)
+        }
     }
     
     func sendResponse(_ data: Data, to central: CBCentral) {
@@ -413,36 +464,52 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         uiLog("🚨 CRITICAL: Central subscribed! Connection successful!", level: .success)
         uiLog("🔗 Central: \(central.identifier.uuidString)", level: .info)
         uiLog("🔗 Characteristic: \(characteristic.uuid.uuidString)", level: .info)
-        uiLog("📊 Connection details - RSSI: unknown, Services discovered: yes", level: .info)
-        uiLog("✅ BLE connection established successfully", level: .success)
         
-        connectedCentrals.insert(central)
-        DispatchQueue.main.async {
-            self.isConnected = true
-            self.connectionCount = self.connectedCentrals.count
+        // Check if this is the Service Changed characteristic
+        if characteristic.uuid == serviceChangedCharacteristicUUID {
+            uiLog("🔄 Client subscribed to Service Changed characteristic", level: .info)
+            uiLog("📡 This will enable GATT cache invalidation", level: .info)
+            
+            // Trigger Service Changed indication to force cache refresh
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.triggerServiceChanged()
+            }
+        } else {
+            uiLog("📊 Connection details - RSSI: unknown, Services discovered: yes", level: .info)
+            uiLog("✅ BLE connection established successfully", level: .success)
+            
+            connectedCentrals.insert(central)
+            DispatchQueue.main.async {
+                self.isConnected = true
+                self.connectionCount = self.connectedCentrals.count
+            }
+            
+            delegate?.peripheralManager(self, didConnect: central)
         }
-        
-        delegate?.peripheralManager(self, didConnect: central)
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        uiLog("🚨 CRITICAL: Central disconnected during setup!", level: .error)
-        uiLog("🔌 Central: \(central.identifier.uuidString)", level: .error)
-        uiLog("🔌 Characteristic: \(characteristic.uuid.uuidString)", level: .error)
-        uiLog("❓ Disconnect reason: Client initiated or connection lost during service discovery", level: .error)
-        uiLog("🧹 Cleaning up connection data for client", level: .info)
-        uiLog("📊 Peripheral state: \(peripheral.state.rawValue)", level: .info)
-        
-        connectedCentrals.remove(central)
-        receivingData[central] = nil
-        pendingResponses[central] = nil
-        
-        DispatchQueue.main.async {
-            self.connectionCount = self.connectedCentrals.count
-            self.isConnected = !self.connectedCentrals.isEmpty
+        if characteristic.uuid == serviceChangedCharacteristicUUID {
+            uiLog("🔄 Client unsubscribed from Service Changed characteristic", level: .info)
+        } else {
+            uiLog("🚨 CRITICAL: Central disconnected during setup!", level: .error)
+            uiLog("🔌 Central: \(central.identifier.uuidString)", level: .error)
+            uiLog("🔌 Characteristic: \(characteristic.uuid.uuidString)", level: .error)
+            uiLog("❓ Disconnect reason: Client initiated or connection lost during service discovery", level: .error)
+            uiLog("🧹 Cleaning up connection data for client", level: .info)
+            uiLog("📊 Peripheral state: \(peripheral.state.rawValue)", level: .info)
+            
+            connectedCentrals.remove(central)
+            receivingData[central] = nil
+            pendingResponses[central] = nil
+            
+            DispatchQueue.main.async {
+                self.connectionCount = self.connectedCentrals.count
+                self.isConnected = !self.connectedCentrals.isEmpty
+            }
+            
+            delegate?.peripheralManager(self, didDisconnect: central)
         }
-        
-        delegate?.peripheralManager(self, didDisconnect: central)
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {

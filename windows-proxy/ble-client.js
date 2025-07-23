@@ -25,9 +25,125 @@ class BLEClient extends EventEmitter {
     this.generalScanMode = false;
     this.discoveredDevices = new Map();
     
+    // Track Noble.js reset attempts
+    this.nobleResetCount = 0;
+    this.maxNobleResets = 2;
+    
     this.setupNobleHandlers();
   }
   
+  // Force complete Noble.js reset when cache clearing fails
+  async forceNobleReset() {
+    if (this.nobleResetCount >= this.maxNobleResets) {
+      console.log(chalk.red(`❌ Maximum Noble.js resets reached (${this.maxNobleResets}), giving up`));
+      throw new Error('Noble.js reset limit exceeded - fundamental BLE communication failure');
+    }
+    
+    this.nobleResetCount++;
+    console.log(chalk.yellow(`🔄 Forcing complete Noble.js reset (attempt ${this.nobleResetCount}/${this.maxNobleResets})`));
+    
+    try {
+      // Stop all Noble.js operations
+      if (this.noble.state === 'poweredOn') {
+        console.log(chalk.gray(`  Stopping Noble.js scanning and operations...`));
+        this.noble.stopScanning();
+      }
+      
+      // Clear all internal state
+      this.connected = false;
+      this.connecting = false;
+      this.peripheral = null;
+      this.requestCharacteristic = null;
+      this.responseCharacteristic = null;
+      this.controlCharacteristic = null;
+      this.discoveredDevices.clear();
+      
+      // Clear any timers
+      if (this.reconnectTimer) {
+        clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = null;
+      }
+      if (this.scanTimeout) {
+        clearTimeout(this.scanTimeout);
+        this.scanTimeout = null;
+      }
+      
+      console.log(chalk.gray(`  Removing all Noble.js event listeners...`));
+      this.noble.removeAllListeners();
+      
+      // Force garbage collection of Noble.js internal state
+      console.log(chalk.gray(`  Forcing Noble.js internal cleanup...`));
+      try {
+        if (this.noble._peripherals && typeof this.noble._peripherals.clear === 'function') {
+          this.noble._peripherals.clear();
+        }
+        if (this.noble._services && typeof this.noble._services.clear === 'function') {
+          this.noble._services.clear();
+        }
+        if (this.noble._characteristics && typeof this.noble._characteristics.clear === 'function') {
+          this.noble._characteristics.clear();
+        }
+      } catch (cleanupError) {
+        console.log(chalk.gray(`    Internal cleanup warning: ${cleanupError.message}`));
+      }
+      
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Reinitialize Noble.js
+      console.log(chalk.gray(`  Reinitializing Noble.js...`));
+      delete require.cache[require.resolve('@abandonware/noble')];
+      this.noble = require('@abandonware/noble');
+      
+      // Setup events again
+      this.setupNobleEvents();
+      
+      // Wait for Noble.js to initialize
+      console.log(chalk.gray(`  Waiting for Noble.js to power on...`));
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Noble.js failed to power on after reset'));
+        }, 10000);
+        
+        const checkState = () => {
+          if (this.noble && this.noble.state === 'poweredOn') {
+            clearTimeout(timeout);
+            resolve();
+          } else if (this.noble && this.noble.state && this.noble.state !== 'unknown') {
+            // Noble.js is initialized but not powered on
+            clearTimeout(timeout);
+            reject(new Error(`Noble.js reset completed but Bluetooth not powered on: ${this.noble.state}`));
+          }
+        };
+        
+        // Check immediately
+        checkState();
+        
+        // Also listen for state changes
+        if (this.noble) {
+          this.noble.once('stateChange', (state) => {
+            clearTimeout(timeout);
+            if (state === 'poweredOn') {
+              resolve();
+            } else {
+              reject(new Error(`Noble.js powered on with unexpected state: ${state}`));
+            }
+          });
+        }
+      });
+      
+      console.log(chalk.green(`✅ Noble.js reset completed successfully`));
+      
+      // Start fresh scanning
+      console.log(chalk.gray(`  Starting fresh scan after Noble.js reset...`));
+      this.startScanning();
+      
+    } catch (error) {
+      console.error(chalk.red(`❌ Noble.js reset failed: ${error.message}`));
+      throw error;
+    }
+  }
+
   // Emit log events for the UI
   bleLog(message, level = 'info') {
     this.emit('log', { message, level, source: 'BLE' });
@@ -289,6 +405,19 @@ class BLEClient extends EventEmitter {
         console.error(chalk.red('🚨 Peripheral error:'));
         console.error(chalk.red(`   Error: ${error.message}`));
         console.error(chalk.red(`   Code: ${error.code || 'N/A'}`));
+        console.error(chalk.red(`   Stack: ${error.stack || 'N/A'}`));
+        this.bleLog(`🚨 Peripheral error: ${error.message}`, 'error');
+      });
+      
+      // Add Noble.js specific event logging
+      peripheral.on('servicesDiscover', (services) => {
+        console.log(chalk.green(`🔍 Noble.js servicesDiscover event: found ${services.length} services`));
+        this.bleLog(`🔍 Noble.js discovered ${services.length} services`, 'info');
+      });
+      
+      peripheral.on('characteristicsDiscover', (characteristics) => {
+        console.log(chalk.green(`🔍 Noble.js characteristicsDiscover event: found ${characteristics.length} characteristics`));
+        this.bleLog(`🔍 Noble.js discovered ${characteristics.length} characteristics`, 'info');
       });
 
       // Connect to peripheral
@@ -304,22 +433,99 @@ class BLEClient extends EventEmitter {
       console.log(chalk.green('✓ Physical connection established'));
       this.bleLog('✅ Physical BLE connection established', 'success');
       
-      // Wait a moment for connection to stabilize
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait longer for connection to stabilize (Noble.js sometimes needs more time)
+      console.log(chalk.gray('  Waiting for BLE stack to stabilize...'));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // Discover services
+      // Discover services with retry logic
       console.log(chalk.blue('Discovering services...'));
       this.bleLog('🔍 Starting service discovery...', 'info');
       console.log(chalk.gray(`  Looking for service: ${this.config.bleServiceUUID}`));
       console.log(chalk.gray(`  Peripheral state before discovery: ${peripheral.state}`));
       this.bleLog(`Peripheral state: ${peripheral.state}`, 'info');
       
-      const discoveryStartTime = Date.now();
-      const services = await this.promisify(peripheral.discoverServices.bind(peripheral), [], 15000);
-      const discoveryTime = Date.now() - discoveryStartTime;
+      let services = null;
+      let discoveryAttempts = 0;
+      const maxDiscoveryAttempts = 3;
       
-      console.log(chalk.green(`✓ Service discovery completed in ${discoveryTime}ms`));
-      this.bleLog(`✅ Service discovery completed in ${discoveryTime}ms`, 'success');
+      while (!services && discoveryAttempts < maxDiscoveryAttempts) {
+        discoveryAttempts++;
+        console.log(chalk.gray(`  Service discovery attempt ${discoveryAttempts}/${maxDiscoveryAttempts}`));
+        
+        try {
+          // Check connection state before each attempt
+          if (peripheral.state !== 'connected') {
+            throw new Error(`Peripheral disconnected before service discovery. State: ${peripheral.state}`);
+          }
+          
+          const discoveryStartTime = Date.now();
+          
+          // Try service discovery with shorter timeout for retries
+          const timeout = discoveryAttempts === 1 ? 15000 : 8000;
+          
+          // Clear basic Noble.js caches - but avoid internal structures
+          console.log(chalk.gray(`    Clearing Noble.js caches safely...`));
+          
+          // Only clear the basic, safe cached data
+          if (peripheral.services) {
+            console.log(chalk.gray(`      Clearing cached services (${peripheral.services.length} found)`));
+            peripheral.services = null;
+          }
+          
+          // On first attempt, try with no service filter (discover all services)
+          // This sometimes helps Noble.js properly initiate service discovery
+          const serviceFilter = discoveryAttempts === 1 ? [] : [this.config.bleServiceUUID.replace(/-/g, '')];
+          console.log(chalk.gray(`    Using service filter: ${serviceFilter.length === 0 ? 'none (discover all)' : serviceFilter.join(', ')}`));
+          console.log(chalk.gray(`    Forcing fresh discovery (no cache)`));
+          
+          // Add a small delay to let Noble.js process the cache clearing
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          services = await this.promisify(peripheral.discoverServices.bind(peripheral), serviceFilter, timeout);
+          
+          const discoveryTime = Date.now() - discoveryStartTime;
+          console.log(chalk.green(`✓ Service discovery completed in ${discoveryTime}ms`));
+          this.bleLog(`✅ Service discovery completed in ${discoveryTime}ms`, 'success');
+          
+          break; // Success, exit retry loop
+          
+        } catch (error) {
+          console.log(chalk.yellow(`⚠️ Service discovery attempt ${discoveryAttempts} failed: ${error.message}`));
+          
+          if (discoveryAttempts < maxDiscoveryAttempts) {
+            console.log(chalk.gray(`  Waiting 1 second before retry...`));
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Check if still connected
+            if (peripheral.state !== 'connected') {
+              throw new Error(`Peripheral disconnected during service discovery retries. State: ${peripheral.state}`);
+            }
+            
+            // On the final attempt, force complete Noble.js reset
+            if (discoveryAttempts === maxDiscoveryAttempts - 1) {
+              console.log(chalk.gray(`  Final attempt: forcing complete Noble.js reset due to cache corruption...`));
+              try {
+                // Disconnect current peripheral first
+                console.log(chalk.gray(`    Disconnecting current peripheral...`));
+                await this.promisify(peripheral.disconnect.bind(peripheral), [], 5000);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Force complete Noble.js reset to clear all corrupted cache
+                await this.forceNobleReset();
+                
+                // The reset will start fresh scanning, so exit this connection attempt
+                throw new Error('Noble.js reset completed - fresh connection will be attempted');
+                
+              } catch (resetError) {
+                console.log(chalk.yellow(`    Noble.js reset failed: ${resetError.message}`));
+                // Continue with the attempt anyway
+              }
+            }
+          } else {
+            throw new Error(`Service discovery failed after ${maxDiscoveryAttempts} attempts: ${error.message}`);
+          }
+        }
+      }
       
       console.log(chalk.gray(`  Discovered ${services ? services.length : 0} services`));
       if (services) {
@@ -356,18 +562,87 @@ class BLEClient extends EventEmitter {
         throw new Error(`Peripheral disconnected before characteristic discovery. State: ${peripheral.state}`);
       }
       
-      // Discover characteristics
+      // Discover characteristics with retry logic
       console.log(chalk.blue('Discovering characteristics...'));
       console.log(chalk.gray(`  Service UUID: ${proxyService.uuid}`));
       console.log(chalk.gray(`  Peripheral state: ${peripheral.state}`));
       
-      let characteristics;
-      try {
-        characteristics = await this.promisify(proxyService.discoverCharacteristics.bind(proxyService), [], 10000);
-      } catch (error) {
-        console.error(chalk.red(`❌ Characteristic discovery failed: ${error.message}`));
-        console.error(chalk.red(`   Peripheral state: ${peripheral.state}`));
-        throw new Error(`Characteristic discovery failed: ${error.message}`);
+      let characteristics = null;
+      let charDiscoveryAttempts = 0;
+      const maxCharDiscoveryAttempts = 3;
+      
+      while (!characteristics && charDiscoveryAttempts < maxCharDiscoveryAttempts) {
+        charDiscoveryAttempts++;
+        console.log(chalk.gray(`  Characteristic discovery attempt ${charDiscoveryAttempts}/${maxCharDiscoveryAttempts}`));
+        
+        try {
+          // Check connection state before each attempt
+          if (peripheral.state !== 'connected') {
+            throw new Error(`Peripheral disconnected before characteristic discovery. State: ${peripheral.state}`);
+          }
+          
+          const charDiscoveryStartTime = Date.now();
+          
+          // Clear basic Noble.js caches for characteristics - but avoid internal structures
+          console.log(chalk.gray(`    Clearing characteristic caches safely...`));
+          
+          // Only clear the basic, safe cached characteristic data
+          if (proxyService.characteristics) {
+            console.log(chalk.gray(`      Clearing cached characteristics (${proxyService.characteristics.length} found)`));
+            proxyService.characteristics = null;
+          }
+          
+          // Try characteristic discovery with shorter timeout for retries
+          const timeout = charDiscoveryAttempts === 1 ? 10000 : 6000;
+          console.log(chalk.gray(`    Using timeout: ${timeout}ms`));
+          console.log(chalk.gray(`    Forcing fresh characteristic discovery (no cache)`));
+          
+          // Add a small delay to let Noble.js process the cache clearing
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          characteristics = await this.promisify(proxyService.discoverCharacteristics.bind(proxyService), [], timeout);
+          
+          const charDiscoveryTime = Date.now() - charDiscoveryStartTime;
+          console.log(chalk.green(`✓ Characteristic discovery completed in ${charDiscoveryTime}ms`));
+          
+          break; // Success, exit retry loop
+          
+        } catch (error) {
+          console.log(chalk.yellow(`⚠️ Characteristic discovery attempt ${charDiscoveryAttempts} failed: ${error.message}`));
+          
+          if (charDiscoveryAttempts < maxCharDiscoveryAttempts) {
+            console.log(chalk.gray(`  Waiting 1 second before retry...`));
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Check if still connected
+            if (peripheral.state !== 'connected') {
+              throw new Error(`Peripheral disconnected during characteristic discovery retries. State: ${peripheral.state}`);
+            }
+            
+            // On the final attempt, force complete Noble.js reset
+            if (charDiscoveryAttempts === maxCharDiscoveryAttempts - 1) {
+              console.log(chalk.gray(`  Final attempt: forcing Noble.js reset for characteristic discovery...`));
+              try {
+                // Disconnect current peripheral first
+                console.log(chalk.gray(`    Disconnecting peripheral for Noble.js reset...`));
+                await this.promisify(peripheral.disconnect.bind(peripheral), [], 5000);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Force complete Noble.js reset to clear all corrupted cache
+                await this.forceNobleReset();
+                
+                // The reset will start fresh scanning, so exit this connection attempt
+                throw new Error('Noble.js reset completed for characteristic discovery');
+                
+              } catch (resetError) {
+                console.log(chalk.yellow(`    Characteristic discovery Noble.js reset failed: ${resetError.message}`));
+                // Continue with the attempt anyway
+              }
+            }
+          } else {
+            throw new Error(`Characteristic discovery failed after ${maxCharDiscoveryAttempts} attempts: ${error.message}`);
+          }
+        }
       }
       
       console.log(chalk.green(`✓ Characteristic discovery completed`));

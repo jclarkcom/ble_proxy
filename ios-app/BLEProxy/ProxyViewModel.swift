@@ -103,12 +103,16 @@ class ProxyViewModel: ObservableObject {
         // Stop uptime timer
         stopUptimeTimer()
         
-        // Reset stats
-        startTime = nil
-        uptime = 0
-        
         logger.info("BLE proxy service stopped")
         addDebugLog("✅ BLE proxy service stopped", level: .success)
+    }
+    
+    // Force connected iOS clients to refresh their GATT cache
+    func forceGATTCacheRefresh() {
+        logger.info("Triggering GATT cache refresh for connected clients")
+        addDebugLog("🔄 Forcing GATT cache refresh for iOS clients", level: .info)
+        
+        bleManager.triggerServiceChanged()
     }
     
     func resetStats() {
