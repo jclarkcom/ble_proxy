@@ -297,13 +297,16 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
-            logger.error("Failed to start advertising: \(error.localizedDescription)")
+            logger.error("❌ Failed to start advertising: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.lastError = error.localizedDescription
                 self.isAdvertising = false
             }
         } else {
-            logger.info("Started advertising successfully")
+            logger.info("📡 BLE advertising started successfully")
+            logger.info("🎯 Device name: BLE-Proxy")
+            logger.info("🔑 Service UUID: \(serviceUUID.uuidString)")
+            logger.info("👀 Waiting for Windows client to discover and connect...")
             DispatchQueue.main.async {
                 self.isAdvertising = true
                 self.lastError = nil
@@ -313,7 +316,9 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        logger.info("Central \(central.identifier) subscribed to \(characteristic.uuid)")
+        logger.info("🔗 Central \(central.identifier) subscribed to characteristic \(characteristic.uuid)")
+        logger.info("📊 Connection details - RSSI: unknown, Services discovered: yes")
+        logger.info("✅ BLE connection established successfully")
         
         connectedCentrals.insert(central)
         DispatchQueue.main.async {
@@ -325,7 +330,9 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        logger.info("Central \(central.identifier) unsubscribed from \(characteristic.uuid)")
+        logger.info("🔌 Central \(central.identifier) unsubscribed from characteristic \(characteristic.uuid)")
+        logger.info("❓ Disconnect reason: Client initiated or connection lost")
+        logger.info("🧹 Cleaning up connection data for client")
         
         connectedCentrals.remove(central)
         receivingData[central] = nil
@@ -340,16 +347,28 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        logger.info("📝 Received \(requests.count) write request(s) from client")
+        
         for request in requests {
             if request.characteristic == requestCharacteristic {
                 if let data = request.value {
+                    logger.info("📦 Processing \(data.count) bytes from client \(request.central.identifier)")
                     handleIncomingData(data, from: request.central)
                 }
                 peripheral.respond(to: request, withResult: .success)
             } else {
+                logger.warning("⚠️ Unknown characteristic write attempt: \(request.characteristic.uuid)")
                 peripheral.respond(to: request, withResult: .attributeNotFound)
             }
         }
+    }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        logger.info("📖 Received read request from client \(request.central.identifier)")
+        logger.info("🔍 Requested characteristic: \(request.characteristic.uuid)")
+        
+        // We don't support read operations for our proxy service
+        peripheral.respond(to: request, withResult: .readNotPermitted)
     }
     
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {

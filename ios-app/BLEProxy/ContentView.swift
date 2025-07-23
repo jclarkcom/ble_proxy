@@ -118,6 +118,13 @@ struct ContentView: View {
                 if let error = viewModel.lastError {
                     ErrorView(error: error)
                 }
+                
+                // Debug Log Display (for troubleshooting)
+                if !viewModel.debugLog.isEmpty {
+                    DebugLogView(logs: viewModel.debugLog, onClear: {
+                        viewModel.clearDebugLog()
+                    })
+                }
             }
             .padding()
             .navigationTitle("")
@@ -469,6 +476,101 @@ struct HelpView: View {
             .navigationBarItems(trailing: Button("Done") {
                 presentationMode.wrappedValue.dismiss()
             })
+        }
+    }
+}
+
+// MARK: - Debug Log View
+struct DebugLogView: View {
+    let logs: [DebugLogEntry]
+    let onClear: () -> Void
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Button(action: {
+                    withAnimation {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "terminal")
+                            .foregroundColor(.blue)
+                        Text("Debug Log (\(logs.count))")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .foregroundColor(.blue)
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Button("Clear") {
+                    onClear()
+                }
+                .font(.caption)
+                .foregroundColor(.red)
+            }
+            
+            if isExpanded {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(logs.indices, id: \.self) { index in
+                            let entry = logs[index]
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(entry.timestamp)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 60, alignment: .leading)
+                                
+                                Text(entry.level.rawValue)
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(entry.level.color)
+                                    .frame(width: 40, alignment: .leading)
+                                
+                                Text(entry.message)
+                                    .font(.caption)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                
+                                Spacer()
+                            }
+                            .padding(.vertical, 2)
+                            .background(index % 2 == 0 ? Color.gray.opacity(0.05) : Color.clear)
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+                .background(Color.black.opacity(0.05))
+                .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(Color.yellow.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Debug Log Entry
+struct DebugLogEntry {
+    let timestamp: String
+    let level: LogLevel
+    let message: String
+    
+    enum LogLevel: String, CaseIterable {
+        case info = "INFO"
+        case warning = "WARN"
+        case error = "ERR"
+        case success = "OK"
+        
+        var color: Color {
+            switch self {
+            case .info: return .blue
+            case .warning: return .orange
+            case .error: return .red
+            case .success: return .green
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import CoreBluetooth
 import Compression
+import Combine
 import os.log
 
 @MainActor
@@ -14,6 +15,7 @@ class ProxyViewModel: ObservableObject {
     @Published var errorCount = 0
     @Published var lastError: String?
     @Published var uptime: TimeInterval = 0
+    @Published var debugLog: [DebugLogEntry] = []
     
     // MARK: - Managers
     private let bleManager = BLEPeripheralManager()
@@ -39,16 +41,21 @@ class ProxyViewModel: ObservableObject {
     // MARK: - Public Methods
     func initialize() {
         logger.info("Initializing proxy system")
-        // Initialization will be triggered by UI
+        addDebugLog("🚀 BLE Proxy iOS app initializing", level: .info)
+        addDebugLog("📱 iOS BLE peripheral mode", level: .info)
+        addDebugLog("🔵 Bluetooth state: \(bleManager.peripheralManager?.state.rawValue ?? -1)", level: .info)
+        addDebugLog("✅ Proxy system ready", level: .success)
     }
     
     func startProxy() {
         guard !isProxyActive else {
             logger.info("Proxy already active")
+            addDebugLog("Proxy already active", level: .warning)
             return
         }
         
         logger.info("Starting BLE proxy service")
+        addDebugLog("🚀 Starting BLE proxy service", level: .info)
         
         startTime = Date()
         isProxyActive = true
@@ -56,32 +63,39 @@ class ProxyViewModel: ObservableObject {
         
         // Start background audio to keep app active
         audioManager.startSilentAudio()
+        addDebugLog("🎵 Background audio started", level: .info)
         
         // Start BLE advertising
         bleManager.startAdvertising()
+        addDebugLog("📡 BLE advertising started", level: .info)
         
         // Start uptime timer
         startUptimeTimer()
         
         logger.info("BLE proxy service started")
+        addDebugLog("✅ BLE proxy service started", level: .success)
     }
     
     func stopProxy() {
         guard isProxyActive else {
             logger.info("Proxy already stopped")
+            addDebugLog("Proxy already stopped", level: .warning)
             return
         }
         
         logger.info("Stopping BLE proxy service")
+        addDebugLog("🛑 Stopping BLE proxy service", level: .info)
         
         isProxyActive = false
         connectionStatus = "Stopped"
         
         // Stop BLE advertising
         bleManager.stopAdvertising()
+        addDebugLog("📡 BLE advertising stopped", level: .info)
         
         // Stop background audio
         audioManager.stopSilentAudio()
+        addDebugLog("🎵 Background audio stopped", level: .info)
         
         // Stop uptime timer
         stopUptimeTimer()
@@ -91,6 +105,7 @@ class ProxyViewModel: ObservableObject {
         uptime = 0
         
         logger.info("BLE proxy service stopped")
+        addDebugLog("✅ BLE proxy service stopped", level: .success)
     }
     
     func resetStats() {
@@ -104,6 +119,39 @@ class ProxyViewModel: ObservableObject {
         if isProxyActive {
             startTime = Date()
             uptime = 0
+        }
+        
+        self.addDebugLog("Statistics reset", level: .info)
+    }
+    
+    func clearDebugLog() {
+        logger.info("Clearing debug log")
+        debugLog.removeAll()
+    }
+    
+    func addDebugLog(_ message: String, level: DebugLogEntry.LogLevel = .info) {
+        let timestamp = DateFormatter.logTimeFormatter.string(from: Date())
+        let entry = DebugLogEntry(timestamp: timestamp, level: level, message: message)
+        
+        DispatchQueue.main.async {
+            self.debugLog.append(entry)
+            
+            // Limit log entries to prevent memory issues
+            if self.debugLog.count > 100 {
+                self.debugLog.removeFirst(self.debugLog.count - 100)
+            }
+        }
+        
+        // Also log to system logger for Xcode console
+        switch level {
+        case .error:
+            logger.error("\(message)")
+        case .warning:
+            logger.info("⚠️ \(message)")
+        case .success:
+            logger.info("✅ \(message)")
+        case .info:
+            logger.info("\(message)")
         }
     }
     
@@ -290,12 +338,14 @@ extension ProxyViewModel: BLEPeripheralManagerDelegate {
     
     nonisolated func peripheralManagerDidStartAdvertising(_ manager: BLEPeripheralManager) {
         Task { @MainActor in
+            addDebugLog("📡 BLE advertising started successfully", level: .success)
             updateConnectionStatus()
         }
     }
     
     nonisolated func peripheralManagerDidStopAdvertising(_ manager: BLEPeripheralManager) {
         Task { @MainActor in
+            addDebugLog("📡 BLE advertising stopped", level: .info)
             updateConnectionStatus()
         }
     }
@@ -303,6 +353,8 @@ extension ProxyViewModel: BLEPeripheralManagerDelegate {
     nonisolated func peripheralManager(_ manager: BLEPeripheralManager, didConnect central: CBCentral) {
         logger.info("Client connected: \(central.identifier)")
         Task { @MainActor in
+            let shortId = String(central.identifier.uuidString.prefix(8))
+            addDebugLog("🔗 Windows client connected: \(shortId)", level: .success)
             updateConnectionStatus()
         }
     }
@@ -310,6 +362,8 @@ extension ProxyViewModel: BLEPeripheralManagerDelegate {
     nonisolated func peripheralManager(_ manager: BLEPeripheralManager, didDisconnect central: CBCentral) {
         logger.info("Client disconnected: \(central.identifier)")
         Task { @MainActor in
+            let shortId = String(central.identifier.uuidString.prefix(8))
+            addDebugLog("🔌 Windows client disconnected: \(shortId)", level: .warning)
             updateConnectionStatus()
         }
     }
@@ -365,4 +419,13 @@ extension ProxyViewModel {
             return "Error"
         }
     }
+}
+
+// MARK: - DateFormatter Extension
+extension DateFormatter {
+    static let logTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 } 
