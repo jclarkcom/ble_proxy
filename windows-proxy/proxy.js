@@ -1269,25 +1269,52 @@ class BLEProxy {
 
   async decompressData(data) {
     return new Promise((resolve, reject) => {
+      // Log data info for debugging
+      console.log(chalk.blue(`Attempting to decompress ${data.length} bytes`));
+      console.log(chalk.blue(`First 20 bytes (hex): ${data.subarray(0, 20).toString('hex')}`));
+      console.log(chalk.blue(`First 20 bytes (utf8): ${data.subarray(0, 20).toString('utf8').replace(/[^\x20-\x7E]/g, '?')}`));
+      
       // Try zlib inflate first (iOS should use .zlib compression)
       zlib.inflate(data, (err, decompressed) => {
         if (err) {
+          console.log(chalk.yellow(`zlib.inflate failed: ${err.message}`));
           // Fallback to gunzip if inflate fails
           zlib.gunzip(data, (err2, decompressed2) => {
             if (err2) {
-              // If both fail, try treating as uncompressed data
-              console.log(chalk.yellow(`Both decompression methods failed, trying as uncompressed data`));
-              try {
-                const result = data.toString('utf8');
-                resolve(result);
-              } catch (parseError) {
-                reject(new Error(`All decompression methods failed. Original errors: inflate: ${err.message}, gunzip: ${err2.message}, raw: ${parseError.message}`));
-              }
+              console.log(chalk.yellow(`zlib.gunzip failed: ${err2.message}`));
+              // Try deflate (raw deflate without headers)
+              zlib.inflateRaw(data, (err3, decompressed3) => {
+                if (err3) {
+                  console.log(chalk.yellow(`zlib.inflateRaw failed: ${err3.message}`));
+                  // Try unzip (auto-detect)
+                  zlib.unzip(data, (err4, decompressed4) => {
+                    if (err4) {
+                      console.log(chalk.yellow(`zlib.unzip failed: ${err4.message}`));
+                      // If all compression methods fail, try treating as uncompressed data
+                      console.log(chalk.yellow(`All decompression methods failed, trying as uncompressed JSON`));
+                      try {
+                        const result = data.toString('utf8');
+                        resolve(result);
+                      } catch (parseError) {
+                        reject(new Error(`All decompression methods failed. Data appears to be compressed but format unknown. First bytes: ${data.subarray(0, 10).toString('hex')}`));
+                      }
+                    } else {
+                      console.log(chalk.green(`Successfully decompressed with zlib.unzip`));
+                      resolve(decompressed4.toString());
+                    }
+                  });
+                } else {
+                  console.log(chalk.green(`Successfully decompressed with zlib.inflateRaw`));
+                  resolve(decompressed3.toString());
+                }
+              });
             } else {
+              console.log(chalk.green(`Successfully decompressed with zlib.gunzip`));
               resolve(decompressed2.toString());
             }
           });
         } else {
+          console.log(chalk.green(`Successfully decompressed with zlib.inflate`));
           resolve(decompressed.toString());
         }
       });
