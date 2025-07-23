@@ -1,4 +1,4 @@
-const noble = require('@abandonware/noble');
+const noble = require('@stoprocent/noble');
 const EventEmitter = require('events');
 const chalk = require('chalk');
 
@@ -309,6 +309,9 @@ class BLEClient extends EventEmitter {
     
     console.log(chalk.blue(`Connecting to device: ${peripheral.advertisement.localName || deviceId}...`));
     
+    // Reset Windows BLE stack before connection to clear any cache issues
+    await this.resetWindowsBLEStack();
+    
     // Stop general scanning
     if (this.generalScanMode) {
       this.stopGeneralScan();
@@ -376,9 +379,11 @@ class BLEClient extends EventEmitter {
     async connectToPeripheral(peripheral) {
     this.peripheral = peripheral;
     
+    // Define connectionInProgress at the method level to avoid scope issues
+    let connectionInProgress = true;
+    
     try {
       // Set up peripheral event handlers
-      let connectionInProgress = true;
       
       peripheral.on('disconnect', () => {
         console.log(chalk.yellow('🔌 Peripheral disconnected'));
@@ -981,6 +986,45 @@ class BLEClient extends EventEmitter {
 
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Windows-specific BLE stack reset to clear cache corruption
+  async resetWindowsBLEStack() {
+    if (process.platform === 'win32') {
+      console.log(chalk.blue('🔄 Resetting Windows BLE stack to clear cache...'));
+      try {
+        // Stop scanning first
+        if (noble.state === 'poweredOn') {
+          await new Promise(resolve => {
+            noble.stopScanning();
+            setTimeout(resolve, 1000);
+          });
+        }
+        
+        // Reset Noble
+        noble.reset();
+        
+        // Wait for powered on state
+        await new Promise((resolve) => {
+          if (noble.state === 'poweredOn') {
+            resolve();
+          } else {
+            noble.once('stateChange', (state) => {
+              if (state === 'poweredOn') {
+                resolve();
+              }
+            });
+          }
+        });
+        
+        console.log(chalk.green('✅ Windows BLE stack reset completed'));
+        this.bleLog('✅ Windows BLE stack reset - cache cleared', 'success');
+        
+      } catch (error) {
+        console.log(chalk.yellow(`⚠️ BLE stack reset failed: ${error.message}`));
+        this.bleLog(`⚠️ BLE stack reset failed: ${error.message}`, 'warning');
+      }
+    }
   }
 }
 
