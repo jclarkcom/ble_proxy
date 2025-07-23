@@ -285,12 +285,16 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
-            logger.error("Failed to add service: \(error.localizedDescription)")
+            logger.error("❌ Failed to add service: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.lastError = error.localizedDescription
             }
         } else {
-            logger.info("Service added successfully")
+            logger.info("✅ Service added successfully: \(service.uuid)")
+            logger.info("📋 Characteristics added: \(service.characteristics?.count ?? 0)")
+            for char in service.characteristics ?? [] {
+                logger.info("  - \(char.uuid): properties=\(char.properties.rawValue)")
+            }
             startAdvertising()
         }
     }
@@ -364,14 +368,36 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
-        logger.info("📖 Received read request from client \(request.central.identifier)")
+        logger.info("📖 Windows client attempting service discovery!")
+        logger.info("🔍 Read request from central: \(request.central.identifier)")
         logger.info("🔍 Requested characteristic: \(request.characteristic.uuid)")
         
-        // We don't support read operations for our proxy service
-        peripheral.respond(to: request, withResult: .readNotPermitted)
+        // Check which characteristic is being read
+        if request.characteristic.uuid == requestCharacteristicUUID {
+            logger.info("  → REQUEST characteristic (write-only)")
+        } else if request.characteristic.uuid == responseCharacteristicUUID {
+            logger.info("  → RESPONSE characteristic (notify/read)")
+        } else if request.characteristic.uuid == controlCharacteristicUUID {
+            logger.info("  → CONTROL characteristic (read/write/notify)")
+        } else {
+            logger.warning("  → ⚠️ UNKNOWN characteristic!")
+        }
+        
+        // For response and control characteristics that support read, return empty value
+        // For request characteristic (write-only), return not permitted
+        if request.characteristic.uuid == responseCharacteristicUUID || 
+           request.characteristic.uuid == controlCharacteristicUUID {
+            request.value = Data() // Return empty data for readable characteristics
+            peripheral.respond(to: request, withResult: .success)
+            logger.info("✅ Responded with success (empty data)")
+        } else {
+            peripheral.respond(to: request, withResult: .readNotPermitted)
+            logger.info("❌ Responded with readNotPermitted")
+        }
     }
     
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
+        logger.info("🔄 Peripheral ready to update subscribers")
         // Continue sending pending data
         for central in connectedCentrals {
             if pendingResponses[central] != nil {
@@ -379,4 +405,26 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             }
         }
     }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String : Any]) {
+        logger.info("🔄 Peripheral manager will restore state: \(dict.keys)")
+    }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didPublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?) {
+        if let error = error {
+            logger.error("❌ Failed to publish L2CAP channel: \(error.localizedDescription)")
+        } else {
+            logger.info("✅ Published L2CAP channel: \(PSM)")
+        }
+    }
+    
+    func peripheralManager(_ peripheral: CBPeripheralManager, didUnpublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?) {
+        if let error = error {
+            logger.error("❌ Failed to unpublish L2CAP channel: \(error.localizedDescription)")
+        } else {
+            logger.info("ℹ️ Unpublished L2CAP channel: \(PSM)")
+        }
+    }
+    
+
 } 
