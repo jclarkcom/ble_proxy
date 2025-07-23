@@ -43,7 +43,7 @@ class ProxyViewModel: ObservableObject {
         logger.info("Initializing proxy system")
         addDebugLog("🚀 BLE Proxy iOS app initializing", level: .info)
         addDebugLog("📱 iOS BLE peripheral mode", level: .info)
-        addDebugLog("🔵 Bluetooth state: \(bleManager.peripheralManager?.state.rawValue ?? -1)", level: .info)
+        addDebugLog("🔵 Bluetooth state: checking", level: .info)
         addDebugLog("✅ Proxy system ready", level: .success)
     }
     

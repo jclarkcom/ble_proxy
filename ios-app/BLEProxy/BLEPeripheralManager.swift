@@ -305,7 +305,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         } else {
             logger.info("📡 BLE advertising started successfully")
             logger.info("🎯 Device name: BLE-Proxy")
-            logger.info("🔑 Service UUID: \(serviceUUID.uuidString)")
+            logger.info("🔑 Service UUID: \(self.serviceUUID.uuidString)")
             logger.info("👀 Waiting for Windows client to discover and connect...")
             DispatchQueue.main.async {
                 self.isAdvertising = true
