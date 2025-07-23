@@ -120,7 +120,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             controlCharacteristic
         ]
         
-        logger.info("✅ Service created with \(proxyService.characteristics?.count ?? 0) characteristics")
+        logger.info("✅ Service created with \(self.proxyService.characteristics?.count ?? 0) characteristics")
         
         // Add service
         logger.info("➕ Adding service to peripheral manager...")
@@ -153,7 +153,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
                     logger.info("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))")
                 }
             } else {
-                logger.info("  • \(key): \(value)")
+                logger.info("  • \(key as String): \(value)")
             }
         }
         
