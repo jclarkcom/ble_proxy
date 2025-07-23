@@ -65,10 +65,10 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     // MARK: - Setup
     private func setupPeripheralManager() {
         logger.info("🚀 Initializing BLE Peripheral Manager...")
-        logger.info("📋 Service UUID will be: \(serviceUUID.uuidString)")
-        logger.info("📋 Request characteristic: \(requestCharacteristicUUID.uuidString)")
-        logger.info("📋 Response characteristic: \(responseCharacteristicUUID.uuidString)")
-        logger.info("📋 Control characteristic: \(controlCharacteristicUUID.uuidString)")
+        logger.info("📋 Service UUID will be: \(self.serviceUUID.uuidString)")
+        logger.info("📋 Request characteristic: \(self.requestCharacteristicUUID.uuidString)")
+        logger.info("📋 Response characteristic: \(self.responseCharacteristicUUID.uuidString)")
+        logger.info("📋 Control characteristic: \(self.controlCharacteristicUUID.uuidString)")
         
         peripheralManager = CBPeripheralManager(delegate: self, queue: DispatchQueue.global(qos: .userInitiated))
         
@@ -78,7 +78,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     
     private func setupService() {
         logger.info("🔧 Setting up BLE service and characteristics...")
-        logger.info("🆔 Service UUID: \(serviceUUID.uuidString)")
+        logger.info("🆔 Service UUID: \(self.serviceUUID.uuidString)")
         
         // Create characteristics
         logger.info("📝 Creating REQUEST characteristic...")
@@ -88,7 +88,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             value: nil,
             permissions: [.writeable]
         )
-        logger.info("  • UUID: \(requestCharacteristicUUID.uuidString)")
+        logger.info("  • UUID: \(self.requestCharacteristicUUID.uuidString)")
         logger.info("  • Properties: write, writeWithoutResponse")
         
         logger.info("📝 Creating RESPONSE characteristic...")
@@ -98,7 +98,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             value: nil,
             permissions: [.readable]
         )
-        logger.info("  • UUID: \(responseCharacteristicUUID.uuidString)")
+        logger.info("  • UUID: \(self.responseCharacteristicUUID.uuidString)")
         logger.info("  • Properties: notify, read")
         
         logger.info("📝 Creating CONTROL characteristic...")
@@ -108,7 +108,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             value: nil,
             permissions: [.readable, .writeable]
         )
-        logger.info("  • UUID: \(controlCharacteristicUUID.uuidString)")
+        logger.info("  • UUID: \(self.controlCharacteristicUUID.uuidString)")
         logger.info("  • Properties: read, write, notify")
         
         // Create service
@@ -137,7 +137,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         }
         
         logger.info("🚀 Starting BLE advertisement...")
-        logger.info("📡 Service UUID to advertise: \(serviceUUID.uuidString)")
+        logger.info("📡 Service UUID to advertise: \(self.serviceUUID.uuidString)")
         logger.info("🏷️ Device name: BLE-Proxy")
         
         let advertisementData: [String: Any] = [
