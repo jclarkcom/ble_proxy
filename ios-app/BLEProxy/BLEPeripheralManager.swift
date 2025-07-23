@@ -21,10 +21,10 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     @Published var lastError: String?
     
     // MARK: - BLE Configuration
-    private let serviceUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCDEF")
-    private let requestCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD01")
-    private let responseCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD02")
-    private let controlCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD03")
+    private let serviceUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcdef")
+    private let requestCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd01")
+    private let responseCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd02")
+    private let controlCharacteristicUUID = CBUUID(string: "a1b2c3d4-e5f6-7890-1234-567890abcd03")
     
     // MARK: - Core Bluetooth
     private var peripheralManager: CBPeripheralManager!
