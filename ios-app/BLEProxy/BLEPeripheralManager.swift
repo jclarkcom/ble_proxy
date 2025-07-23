@@ -290,9 +290,15 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     
     func sendResponse(_ data: Data, to central: CBCentral) {
         guard connectedCentrals.contains(central) else {
-            uiLog("Cannot send response - central not connected", level: .error)
+            uiLog("❌ Cannot send response - central not connected", level: .error)
+            uiLog("🔍 Central ID: \(central.identifier.uuidString)", level: .error)
+            uiLog("🔍 Connected centrals: \(connectedCentrals.count)", level: .error)
             return
         }
+        
+        uiLog("📤 Starting BLE response transmission...", level: .info)
+        uiLog("🔗 Target central: \(central.identifier.uuidString)", level: .info)
+        uiLog("📊 Response data size: \(data.count) bytes", level: .info)
         
         // Add length header
         var totalLength = UInt32(data.count)
@@ -300,13 +306,18 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         headerData.append(Data(bytes: &totalLength, count: 4))
         let fullData = headerData + data
         
+        uiLog("📦 Added 4-byte length header, total size: \(fullData.count) bytes", level: .info)
+        
         // Split into chunks if necessary
         let chunks = chunkData(fullData, maxChunkSize: 20) // BLE characteristic limit
+        uiLog("✂️ Split into \(chunks.count) chunks of max 20 bytes each", level: .info)
         
         // Store chunks for this central
         pendingResponses[central] = chunks
+        uiLog("💾 Stored \(chunks.count) chunks for transmission", level: .info)
         
         // Send first chunk
+        uiLog("🚀 Starting chunk transmission...", level: .info)
         sendNextChunk(to: central)
     }
     
@@ -325,11 +336,18 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     
     private func sendNextChunk(to central: CBCentral) {
         guard var chunks = pendingResponses[central], !chunks.isEmpty else {
+            uiLog("✅ All chunks sent successfully to central", level: .success)
             return
         }
         
         let chunk = chunks.removeFirst()
         pendingResponses[central] = chunks
+        
+        let chunkIndex = (pendingResponses[central]?.count ?? 0) + 1
+        let totalChunks = chunkIndex + chunks.count
+        
+        uiLog("📤 Sending chunk \(totalChunks - chunks.count)/\(totalChunks): \(chunk.count) bytes", level: .info)
+        uiLog("🔍 Chunk data (hex): \(chunk.prefix(min(chunk.count, 20)).map { String(format: "%02x", $0) }.joined())", level: .info)
         
         let success = peripheralManager.updateValue(
             chunk,
@@ -338,10 +356,11 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         )
         
         if success {
-            uiLog("Sent chunk of \(chunk.count) bytes", level: .info)
+            uiLog("✅ Chunk \(totalChunks - chunks.count)/\(totalChunks) sent successfully", level: .success)
             
             // If more chunks remain, send next one after a small delay
             if !chunks.isEmpty {
+                uiLog("⏳ \(chunks.count) chunks remaining, scheduling next chunk in 10ms", level: .info)
                 DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.01) {
                     self.sendNextChunk(to: central)
                 }
@@ -351,11 +370,19 @@ class BLEPeripheralManager: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self.responseCount += 1
                 }
-                uiLog("Response sent successfully", level: .success)
+                uiLog("🎉 Response sent successfully - all \(totalChunks) chunks transmitted!", level: .success)
+                uiLog("📊 Updated response count: \(self.responseCount + 1)", level: .info)
             }
         } else {
-            uiLog("Failed to send chunk - will retry", level: .warning)
+            uiLog("❌ Failed to send chunk \(totalChunks - chunks.count)/\(totalChunks) - will retry", level: .error)
+            uiLog("🔍 Central subscribed to response characteristic: \(central.identifier.uuidString)", level: .error)
+            uiLog("🔍 Peripheral manager state: \(peripheralManager.state.rawValue)", level: .error)
+            uiLog("🔍 Response characteristic: \(responseCharacteristic?.uuid.uuidString ?? "nil")", level: .error)
+            
+            // Put chunk back at the beginning for retry
             pendingResponses[central] = [chunk] + chunks
+            
+            uiLog("🔄 Chunk queued for retry, will attempt again when peripheral is ready", level: .warning)
         }
     }
     

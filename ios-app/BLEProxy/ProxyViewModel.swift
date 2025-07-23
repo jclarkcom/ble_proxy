@@ -251,25 +251,45 @@ class ProxyViewModel: ObservableObject {
     
     // MARK: - Data Processing
     private func processProxyRequest(_ data: Data) async {
+        addDebugLog("🔄 Starting proxy request processing...", level: .info)
+        addDebugLog("📊 Received data size: \(data.count) bytes", level: .info)
+        
         do {
-            // Decompress the request
+            // Step 1: Decompress the request
+            addDebugLog("🗜️ Step 1: Attempting to decompress request data...", level: .info)
             let decompressedData = try await decompressData(data)
+            addDebugLog("✅ Step 1: Decompression successful - \(decompressedData.count) bytes", level: .success)
             
-            // Parse JSON
+            // Step 2: Parse JSON
+            addDebugLog("📝 Step 2: Attempting to parse JSON...", level: .info)
             let decoder = JSONDecoder()
             let proxyRequest = try decoder.decode(ProxyRequest.self, from: decompressedData)
+            addDebugLog("✅ Step 2: JSON parsing successful", level: .success)
+            addDebugLog("🌐 Request details: \(proxyRequest.method) \(proxyRequest.url)", level: .info)
+            addDebugLog("📋 Request ID: \(proxyRequest.id)", level: .info)
             
             logger.info("Processing request: \(proxyRequest.method) \(proxyRequest.url)")
             
-            // Make HTTP request
+            // Step 3: Make HTTP request
+            addDebugLog("🌍 Step 3: Making HTTP request to \(proxyRequest.url)...", level: .info)
             let response = await httpClient.makeRequest(proxyRequest)
+            addDebugLog("✅ Step 3: HTTP request completed", level: .success)
+            addDebugLog("📊 HTTP response: \(response.statusCode) \(response.statusMessage)", level: .info)
+            addDebugLog("📦 Response body size: \(response.body.count) bytes", level: .info)
             
             logger.info("Received response: \(response.statusCode)")
             
-            // Send response back via BLE
+            // Step 4: Send response back via BLE
+            addDebugLog("📡 Step 4: Sending response back via BLE...", level: .info)
             await sendProxyResponse(response)
+            addDebugLog("✅ Step 4: BLE response sending completed", level: .success)
+            addDebugLog("🎉 Proxy request processing completed successfully!", level: .success)
             
         } catch {
+            addDebugLog("❌ ERROR in proxy request processing!", level: .error)
+            addDebugLog("🔍 Error details: \(error.localizedDescription)", level: .error)
+            addDebugLog("🔍 Error type: \(type(of: error))", level: .error)
+            
             logger.error("Error processing request: \(error.localizedDescription)")
             
             await MainActor.run {
@@ -280,22 +300,52 @@ class ProxyViewModel: ObservableObject {
     }
     
     private func sendProxyResponse(_ response: ProxyResponse) async {
+        addDebugLog("📤 Starting proxy response sending...", level: .info)
+        addDebugLog("📋 Response ID: \(response.id)", level: .info)
+        addDebugLog("📊 Response status: \(response.statusCode) \(response.statusMessage)", level: .info)
+        addDebugLog("📦 Response body size: \(response.body.count) bytes", level: .info)
+        
         do {
-            // Encode response to JSON
+            // Step 1: Encode response to JSON
+            addDebugLog("📝 Step 1: Encoding response to JSON...", level: .info)
             let encoder = JSONEncoder()
             let responseData = try encoder.encode(response)
+            addDebugLog("✅ Step 1: JSON encoding successful - \(responseData.count) bytes", level: .success)
             
-            // Compress response
+            // Step 2: Compress response
+            addDebugLog("🗜️ Step 2: Compressing response data...", level: .info)
             let compressedData = try await compressData(responseData)
+            addDebugLog("✅ Step 2: Compression successful - \(compressedData.count) bytes (ratio: \(String(format: "%.1f", Double(compressedData.count) / Double(responseData.count) * 100))%)", level: .success)
             
-            // Send via BLE to all connected centrals
-            for central in bleManager.connectedClients {
+            // Step 3: Send via BLE to all connected centrals
+            addDebugLog("📡 Step 3: Sending via BLE to connected clients...", level: .info)
+            let connectedClients = bleManager.connectedClients
+            addDebugLog("👥 Connected clients count: \(connectedClients.count)", level: .info)
+            
+            if connectedClients.isEmpty {
+                addDebugLog("⚠️ No connected clients to send response to!", level: .warning)
+                await MainActor.run {
+                    self.lastError = "No connected clients to send response to"
+                }
+                return
+            }
+            
+            for (index, central) in connectedClients.enumerated() {
+                let shortId = String(central.identifier.uuidString.prefix(8))
+                addDebugLog("📤 Sending to client \(index + 1)/\(connectedClients.count): \(shortId)", level: .info)
                 bleManager.sendResponse(compressedData, to: central)
             }
             
+            addDebugLog("✅ Step 3: BLE sending initiated for all clients", level: .success)
+            
             logger.info("Response sent via BLE")
+            addDebugLog("🎉 Proxy response sending completed successfully!", level: .success)
             
         } catch {
+            addDebugLog("❌ ERROR in proxy response sending!", level: .error)
+            addDebugLog("🔍 Error details: \(error.localizedDescription)", level: .error)
+            addDebugLog("🔍 Error type: \(type(of: error))", level: .error)
+            
             logger.error("Error sending response: \(error.localizedDescription)")
             
             await MainActor.run {
