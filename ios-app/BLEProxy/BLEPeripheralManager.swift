@@ -64,34 +64,55 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     
     // MARK: - Setup
     private func setupPeripheralManager() {
+        logger.info("🚀 Initializing BLE Peripheral Manager...")
+        logger.info("📋 Service UUID will be: \(serviceUUID.uuidString)")
+        logger.info("📋 Request characteristic: \(requestCharacteristicUUID.uuidString)")
+        logger.info("📋 Response characteristic: \(responseCharacteristicUUID.uuidString)")
+        logger.info("📋 Control characteristic: \(controlCharacteristicUUID.uuidString)")
+        
         peripheralManager = CBPeripheralManager(delegate: self, queue: DispatchQueue.global(qos: .userInitiated))
-        logger.info("BLE Peripheral Manager initialized")
+        
+        logger.info("✅ BLE Peripheral Manager created")
+        logger.info("⏳ Waiting for Bluetooth state change...")
     }
     
     private func setupService() {
+        logger.info("🔧 Setting up BLE service and characteristics...")
+        logger.info("🆔 Service UUID: \(serviceUUID.uuidString)")
+        
         // Create characteristics
+        logger.info("📝 Creating REQUEST characteristic...")
         requestCharacteristic = CBMutableCharacteristic(
             type: requestCharacteristicUUID,
             properties: [.write, .writeWithoutResponse],
             value: nil,
             permissions: [.writeable]
         )
+        logger.info("  • UUID: \(requestCharacteristicUUID.uuidString)")
+        logger.info("  • Properties: write, writeWithoutResponse")
         
+        logger.info("📝 Creating RESPONSE characteristic...")
         responseCharacteristic = CBMutableCharacteristic(
             type: responseCharacteristicUUID,
             properties: [.notify, .read],
             value: nil,
             permissions: [.readable]
         )
+        logger.info("  • UUID: \(responseCharacteristicUUID.uuidString)")
+        logger.info("  • Properties: notify, read")
         
+        logger.info("📝 Creating CONTROL characteristic...")
         controlCharacteristic = CBMutableCharacteristic(
             type: controlCharacteristicUUID,
             properties: [.read, .write, .notify],
             value: nil,
             permissions: [.readable, .writeable]
         )
+        logger.info("  • UUID: \(controlCharacteristicUUID.uuidString)")
+        logger.info("  • Properties: read, write, notify")
         
         // Create service
+        logger.info("🏗️ Creating BLE service...")
         proxyService = CBMutableService(type: serviceUUID, primary: true)
         proxyService.characteristics = [
             requestCharacteristic,
@@ -99,9 +120,12 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             controlCharacteristic
         ]
         
+        logger.info("✅ Service created with \(proxyService.characteristics?.count ?? 0) characteristics")
+        
         // Add service
+        logger.info("➕ Adding service to peripheral manager...")
         peripheralManager.add(proxyService)
-        logger.info("BLE service and characteristics created")
+        logger.info("✅ BLE service and characteristics setup completed")
     }
     
     // MARK: - Public Methods
@@ -112,10 +136,26 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             return
         }
         
+        logger.info("🚀 Starting BLE advertisement...")
+        logger.info("📡 Service UUID to advertise: \(serviceUUID.uuidString)")
+        logger.info("🏷️ Device name: BLE-Proxy")
+        
         let advertisementData: [String: Any] = [
             CBAdvertisementDataServiceUUIDsKey: [serviceUUID],
             CBAdvertisementDataLocalNameKey: "BLE-Proxy"
         ]
+        
+        // Log the advertisement data being sent
+        logger.info("📤 Advertisement data:")
+        for (key, value) in advertisementData {
+            if key == CBAdvertisementDataServiceUUIDsKey {
+                if let uuids = value as? [CBUUID] {
+                    logger.info("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))")
+                }
+            } else {
+                logger.info("  • \(key): \(value)")
+            }
+        }
         
         peripheralManager.startAdvertising(advertisementData)
         logger.info("Started advertising BLE proxy service")
@@ -258,28 +298,56 @@ class BLEPeripheralManager: NSObject, ObservableObject {
 // MARK: - CBPeripheralManagerDelegate
 extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
-        logger.info("Peripheral manager state changed: \(peripheral.state.rawValue)")
+        let stateString = self.stateString(for: peripheral.state)
+        logger.info("🔵 Peripheral manager state changed: \(stateString) (\(peripheral.state.rawValue))")
         
         switch peripheral.state {
         case .poweredOn:
+            logger.info("✅ Bluetooth powered on - setting up service...")
             setupService()
         case .poweredOff:
+            logger.warning("⚠️ Bluetooth powered off")
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth is turned off"
                 self.isAdvertising = false
             }
         case .unauthorized:
+            logger.error("❌ Bluetooth access unauthorized")
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth access denied"
             }
         case .unsupported:
+            logger.error("❌ Bluetooth LE not supported")
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth LE not supported"
             }
-        default:
+        case .unknown:
+            logger.warning("❓ Bluetooth state unknown")
+            DispatchQueue.main.async {
+                self.lastError = "Bluetooth state unknown"
+            }
+        case .resetting:
+            logger.info("🔄 Bluetooth resetting...")
+            DispatchQueue.main.async {
+                self.lastError = "Bluetooth resetting"
+            }
+        @unknown default:
+            logger.warning("❓ Unknown Bluetooth state: \(peripheral.state.rawValue)")
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth not ready"
             }
+        }
+    }
+    
+    private func stateString(for state: CBManagerState) -> String {
+        switch state {
+        case .unknown: return "Unknown"
+        case .resetting: return "Resetting"
+        case .unsupported: return "Unsupported"
+        case .unauthorized: return "Unauthorized"
+        case .poweredOff: return "Powered Off"
+        case .poweredOn: return "Powered On"
+        @unknown default: return "Unknown State \(state.rawValue)"
         }
     }
     
