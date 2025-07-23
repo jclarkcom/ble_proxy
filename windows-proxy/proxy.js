@@ -431,18 +431,40 @@ class BLEProxy {
           throw new Error('BLE client is not connected to iOS device');
         }
 
-        const response = await this.bleClient.sendRequest(JSON.stringify(requestData));
+                const response = await this.bleClient.sendRequest(JSON.stringify(requestData));
         const endTime = Date.now();
         const duration = endTime - startTime;
-
+        
         console.log(chalk.green(`✅ Test request completed in ${duration}ms`));
 
-        // Parse response
+        // Decompress and parse response
         let responseData;
         try {
-          responseData = JSON.parse(response);
-        } catch (e) {
-          responseData = { data: response };
+          // Convert response to Buffer for decompression
+          // The response might be a string representation of binary data
+          let responseBuffer;
+          if (typeof response === 'string') {
+            // Try to convert string back to buffer (it might be base64 or binary string)
+            try {
+              responseBuffer = Buffer.from(response, 'binary');
+            } catch (e) {
+              responseBuffer = Buffer.from(response, 'utf8');
+            }
+          } else {
+            responseBuffer = response;
+          }
+          
+          const decompressedResponse = await this.decompressData(responseBuffer);
+          responseData = JSON.parse(decompressedResponse);
+        } catch (decompressError) {
+          console.log(chalk.yellow(`BLE response decompression error: ${decompressError.message}`));
+          // Try parsing as direct JSON if decompression fails
+          try {
+            responseData = JSON.parse(response);
+          } catch (parseError) {
+            console.log(chalk.yellow(`BLE response parse error: ${parseError.message}`));
+            responseData = { data: response };
+          }
         }
 
         res.writeHead(200);
