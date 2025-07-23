@@ -440,13 +440,8 @@ class BLEProxy {
         // Decompress and parse response using inflateRaw (which works for iOS)
         let responseData;
         try {
-          // Convert response to Buffer for decompression
-          let responseBuffer;
-          if (typeof response === 'string') {
-            responseBuffer = Buffer.from(response, 'binary');
-          } else {
-            responseBuffer = response;
-          }
+          // Response is now a Buffer from BLE client
+          const responseBuffer = response;
           
           // Use inflateRaw since that's what works with iOS compression
           const decompressedResponse = await new Promise((resolve, reject) => {

@@ -1050,16 +1050,16 @@ class BLEClient extends EventEmitter {
       this.receivedChunks = [];
       this.receivedLength = 0;
       
-      // Convert buffer to string for response
-      const responseString = fullData.toString('utf8');
-      
       // Resolve pending request if exists
       if (this.pendingRequest) {
-        this.pendingRequest.resolve(responseString);
+        // For sendRequest, return raw Buffer to preserve binary data
+        this.pendingRequest.resolve(fullData);
+        // Don't emit response event when we have a pending request
+        // to avoid double-processing by both Promise and event handlers
+      } else {
+        // Only emit the response for other listeners when no pending request
+        this.emit('response', fullData);
       }
-      
-      // Also emit the response for other listeners
-      this.emit('response', fullData);
     }
   }
 
