@@ -370,6 +370,12 @@ extension ProxyViewModel: BLEPeripheralManagerDelegate {
             updateConnectionStatus()
         }
     }
+    
+    nonisolated func peripheralManager(_ manager: BLEPeripheralManager, didGenerateLog message: String, level: DebugLogEntry.LogLevel) {
+        Task { @MainActor in
+            addDebugLog(message, level: level)
+        }
+    }
 }
 
 // MARK: - Helper Extensions

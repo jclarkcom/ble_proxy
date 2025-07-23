@@ -2,6 +2,7 @@ import Foundation
 import CoreBluetooth
 import Compression
 import os.log
+import SwiftUI
 
 protocol BLEPeripheralManagerDelegate: AnyObject {
     func peripheralManager(_ manager: BLEPeripheralManager, didReceiveRequest data: Data)
@@ -9,6 +10,7 @@ protocol BLEPeripheralManagerDelegate: AnyObject {
     func peripheralManagerDidStopAdvertising(_ manager: BLEPeripheralManager)
     func peripheralManager(_ manager: BLEPeripheralManager, didConnect central: CBCentral)
     func peripheralManager(_ manager: BLEPeripheralManager, didDisconnect central: CBCentral)
+    func peripheralManager(_ manager: BLEPeripheralManager, didGenerateLog message: String, level: DebugLogEntry.LogLevel)
 }
 
 class BLEPeripheralManager: NSObject, ObservableObject {
@@ -49,6 +51,26 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     // MARK: - Logging
     private let logger = Logger(subsystem: "com.bleproxy.app", category: "BLEPeripheral")
     
+    // Helper method to send logs to both system logger and UI
+    private func uiLog(_ message: String, level: DebugLogEntry.LogLevel = .info) {
+        // Send to UI via delegate
+        DispatchQueue.main.async {
+            self.delegate?.peripheralManager(self, didGenerateLog: message, level: level)
+        }
+        
+        // Also log to system logger for Xcode console
+        switch level {
+        case .error:
+            logger.error("\(message)")
+        case .warning:
+            logger.info("⚠️ \(message)")
+        case .success:
+            logger.info("✅ \(message)")
+        case .info:
+            logger.info("\(message)")
+        }
+    }
+    
     // MARK: - Data Structures
     private struct ReceivingData {
         var expectedLength: UInt32 = 0
@@ -64,55 +86,55 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     
     // MARK: - Setup
     private func setupPeripheralManager() {
-        logger.info("🚀 Initializing BLE Peripheral Manager...")
-        logger.info("📋 Service UUID will be: \(self.serviceUUID.uuidString)")
-        logger.info("📋 Request characteristic: \(self.requestCharacteristicUUID.uuidString)")
-        logger.info("📋 Response characteristic: \(self.responseCharacteristicUUID.uuidString)")
-        logger.info("📋 Control characteristic: \(self.controlCharacteristicUUID.uuidString)")
+        uiLog("🚀 Initializing BLE Peripheral Manager...", level: .info)
+        uiLog("📋 Service UUID will be: \(self.serviceUUID.uuidString)", level: .info)
+        uiLog("📋 Request characteristic: \(self.requestCharacteristicUUID.uuidString)", level: .info)
+        uiLog("📋 Response characteristic: \(self.responseCharacteristicUUID.uuidString)", level: .info)
+        uiLog("📋 Control characteristic: \(self.controlCharacteristicUUID.uuidString)", level: .info)
         
         peripheralManager = CBPeripheralManager(delegate: self, queue: DispatchQueue.global(qos: .userInitiated))
         
-        logger.info("✅ BLE Peripheral Manager created")
-        logger.info("⏳ Waiting for Bluetooth state change...")
+        uiLog("✅ BLE Peripheral Manager created", level: .success)
+        uiLog("⏳ Waiting for Bluetooth state change...", level: .info)
     }
     
     private func setupService() {
-        logger.info("🔧 Setting up BLE service and characteristics...")
-        logger.info("🆔 Service UUID: \(self.serviceUUID.uuidString)")
+        uiLog("🔧 Setting up BLE service and characteristics...", level: .info)
+        uiLog("🆔 Service UUID: \(self.serviceUUID.uuidString)", level: .info)
         
         // Create characteristics
-        logger.info("📝 Creating REQUEST characteristic...")
+        uiLog("📝 Creating REQUEST characteristic...", level: .info)
         requestCharacteristic = CBMutableCharacteristic(
             type: requestCharacteristicUUID,
             properties: [.write, .writeWithoutResponse],
             value: nil,
             permissions: [.writeable]
         )
-        logger.info("  • UUID: \(self.requestCharacteristicUUID.uuidString)")
-        logger.info("  • Properties: write, writeWithoutResponse")
+        uiLog("  • UUID: \(self.requestCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: write, writeWithoutResponse", level: .info)
         
-        logger.info("📝 Creating RESPONSE characteristic...")
+        uiLog("📝 Creating RESPONSE characteristic...", level: .info)
         responseCharacteristic = CBMutableCharacteristic(
             type: responseCharacteristicUUID,
             properties: [.notify, .read],
             value: nil,
             permissions: [.readable]
         )
-        logger.info("  • UUID: \(self.responseCharacteristicUUID.uuidString)")
-        logger.info("  • Properties: notify, read")
+        uiLog("  • UUID: \(self.responseCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: notify, read", level: .info)
         
-        logger.info("📝 Creating CONTROL characteristic...")
+        uiLog("📝 Creating CONTROL characteristic...", level: .info)
         controlCharacteristic = CBMutableCharacteristic(
             type: controlCharacteristicUUID,
             properties: [.read, .write, .notify],
             value: nil,
             permissions: [.readable, .writeable]
         )
-        logger.info("  • UUID: \(self.controlCharacteristicUUID.uuidString)")
-        logger.info("  • Properties: read, write, notify")
+        uiLog("  • UUID: \(self.controlCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: read, write, notify", level: .info)
         
         // Create service
-        logger.info("🏗️ Creating BLE service...")
+        uiLog("🏗️ Creating BLE service...", level: .info)
         proxyService = CBMutableService(type: serviceUUID, primary: true)
         proxyService.characteristics = [
             requestCharacteristic,
@@ -120,25 +142,25 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             controlCharacteristic
         ]
         
-        logger.info("✅ Service created with \(self.proxyService.characteristics?.count ?? 0) characteristics")
+        uiLog("✅ Service created with \(self.proxyService.characteristics?.count ?? 0) characteristics", level: .success)
         
         // Add service
-        logger.info("➕ Adding service to peripheral manager...")
+        uiLog("➕ Adding service to peripheral manager...", level: .info)
         peripheralManager.add(proxyService)
-        logger.info("✅ BLE service and characteristics setup completed")
+        uiLog("✅ BLE service and characteristics setup completed", level: .success)
     }
     
     // MARK: - Public Methods
     func startAdvertising() {
         guard peripheralManager.state == .poweredOn else {
-            logger.error("Cannot start advertising - Bluetooth not powered on")
+            uiLog("Cannot start advertising - Bluetooth not powered on", level: .error)
             lastError = "Bluetooth not available"
             return
         }
         
-        logger.info("🚀 Starting BLE advertisement...")
-        logger.info("📡 Service UUID to advertise: \(self.serviceUUID.uuidString)")
-        logger.info("🏷️ Device name: BLE-Proxy")
+        uiLog("🚀 Starting BLE advertisement...", level: .info)
+        uiLog("📡 Service UUID to advertise: \(self.serviceUUID.uuidString)", level: .info)
+        uiLog("🏷️ Device name: BLE-Proxy", level: .info)
         
         let advertisementData: [String: Any] = [
             CBAdvertisementDataServiceUUIDsKey: [serviceUUID],
@@ -146,19 +168,19 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         ]
         
         // Log the advertisement data being sent
-        logger.info("📤 Advertisement data:")
+        uiLog("📤 Advertisement data:", level: .info)
         for (key, value) in advertisementData {
             if key == CBAdvertisementDataServiceUUIDsKey {
                 if let uuids = value as? [CBUUID] {
-                    logger.info("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))")
+                    uiLog("  • Service UUIDs: \(uuids.map { $0.uuidString }.joined(separator: ", "))", level: .info)
                 }
             } else {
-                logger.info("  • \(key): \(String(describing: value))")
+                uiLog("  • \(key): \(String(describing: value))", level: .info)
             }
         }
         
         peripheralManager.startAdvertising(advertisementData)
-        logger.info("Started advertising BLE proxy service")
+        uiLog("Started advertising BLE proxy service", level: .success)
     }
     
     func stopAdvertising() {
@@ -166,13 +188,13 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         DispatchQueue.main.async {
             self.isAdvertising = false
         }
-        logger.info("Stopped advertising")
+        uiLog("Stopped advertising", level: .info)
         delegate?.peripheralManagerDidStopAdvertising(self)
     }
     
     func sendResponse(_ data: Data, to central: CBCentral) {
         guard connectedCentrals.contains(central) else {
-            logger.error("Cannot send response - central not connected")
+            uiLog("Cannot send response - central not connected", level: .error)
             return
         }
         
@@ -220,7 +242,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         )
         
         if success {
-            logger.debug("Sent chunk of \(chunk.count) bytes")
+            uiLog("Sent chunk of \(chunk.count) bytes", level: .info)
             
             // If more chunks remain, send next one after a small delay
             if !chunks.isEmpty {
@@ -233,10 +255,10 @@ class BLEPeripheralManager: NSObject, ObservableObject {
                 DispatchQueue.main.async {
                     self.responseCount += 1
                 }
-                logger.info("Response sent successfully")
+                uiLog("Response sent successfully", level: .success)
             }
         } else {
-            logger.warning("Failed to send chunk - will retry")
+            uiLog("Failed to send chunk - will retry", level: .warning)
             pendingResponses[central] = [chunk] + chunks
         }
     }
@@ -248,7 +270,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         if !receivingInfo.isReceiving {
             // First chunk - extract length header
             guard data.count >= 4 else {
-                logger.error("Invalid data header - too short")
+                uiLog("Invalid data header - too short", level: .error)
                 return
             }
             
@@ -257,7 +279,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             receivingInfo.chunks = []
             receivingInfo.isReceiving = true
             
-            logger.info("Starting to receive \(receivingInfo.expectedLength) bytes")
+            uiLog("Starting to receive \(receivingInfo.expectedLength) bytes", level: .info)
             
             // Process remaining data from first chunk
             let remainingData = data.subdata(in: 4..<data.count)
@@ -276,7 +298,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             let fullData = receivingInfo.chunks.reduce(Data()) { $0 + $1 }
             let finalData = fullData.prefix(Int(receivingInfo.expectedLength))
             
-            logger.info("Received complete request: \(finalData.count) bytes")
+            uiLog("Received complete request: \(finalData.count) bytes", level: .success)
             
             // Reset receiving state
             receivingData[central] = nil
@@ -299,40 +321,40 @@ class BLEPeripheralManager: NSObject, ObservableObject {
 extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
         let stateString = self.stateString(for: peripheral.state)
-        logger.info("🔵 Peripheral manager state changed: \(stateString) (\(peripheral.state.rawValue))")
+        uiLog("🔵 Peripheral manager state changed: \(stateString) (\(peripheral.state.rawValue))", level: .info)
         
         switch peripheral.state {
         case .poweredOn:
-            logger.info("✅ Bluetooth powered on - setting up service...")
+            uiLog("✅ Bluetooth powered on - setting up service...", level: .success)
             setupService()
         case .poweredOff:
-            logger.warning("⚠️ Bluetooth powered off")
+            uiLog("⚠️ Bluetooth powered off", level: .warning)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth is turned off"
                 self.isAdvertising = false
             }
         case .unauthorized:
-            logger.error("❌ Bluetooth access unauthorized")
+            uiLog("❌ Bluetooth access unauthorized", level: .error)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth access denied"
             }
         case .unsupported:
-            logger.error("❌ Bluetooth LE not supported")
+            uiLog("❌ Bluetooth LE not supported", level: .error)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth LE not supported"
             }
         case .unknown:
-            logger.warning("❓ Bluetooth state unknown")
+            uiLog("❓ Bluetooth state unknown", level: .warning)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth state unknown"
             }
         case .resetting:
-            logger.info("🔄 Bluetooth resetting...")
+            uiLog("🔄 Bluetooth resetting...", level: .info)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth resetting"
             }
         @unknown default:
-            logger.warning("❓ Unknown Bluetooth state: \(peripheral.state.rawValue)")
+            uiLog("❓ Unknown Bluetooth state: \(peripheral.state.rawValue)", level: .warning)
             DispatchQueue.main.async {
                 self.lastError = "Bluetooth not ready"
             }
@@ -353,15 +375,15 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error = error {
-            logger.error("❌ Failed to add service: \(error.localizedDescription)")
+            uiLog("❌ Failed to add service: \(error.localizedDescription)", level: .error)
             DispatchQueue.main.async {
                 self.lastError = error.localizedDescription
             }
         } else {
-            logger.info("✅ Service added successfully: \(service.uuid)")
-            logger.info("📋 Characteristics added: \(service.characteristics?.count ?? 0)")
+            uiLog("✅ Service added successfully: \(service.uuid)", level: .success)
+            uiLog("📋 Characteristics added: \(service.characteristics?.count ?? 0)", level: .info)
             for char in service.characteristics ?? [] {
-                logger.info("  - \(char.uuid): properties=\(char.properties.rawValue)")
+                uiLog("  - \(char.uuid): properties=\(char.properties.rawValue)", level: .info)
             }
             startAdvertising()
         }
@@ -369,16 +391,16 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     
     func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: Error?) {
         if let error = error {
-            logger.error("❌ Failed to start advertising: \(error.localizedDescription)")
+            uiLog("❌ Failed to start advertising: \(error.localizedDescription)", level: .error)
             DispatchQueue.main.async {
                 self.lastError = error.localizedDescription
                 self.isAdvertising = false
             }
         } else {
-            logger.info("📡 BLE advertising started successfully")
-            logger.info("🎯 Device name: BLE-Proxy")
-            logger.info("🔑 Service UUID: \(self.serviceUUID.uuidString)")
-            logger.info("👀 Waiting for Windows client to discover and connect...")
+            uiLog("📡 BLE advertising started successfully", level: .success)
+            uiLog("🎯 Device name: BLE-Proxy", level: .info)
+            uiLog("🔑 Service UUID: \(self.serviceUUID.uuidString)", level: .info)
+            uiLog("👀 Waiting for Windows client to discover and connect...", level: .info)
             DispatchQueue.main.async {
                 self.isAdvertising = true
                 self.lastError = nil
@@ -388,11 +410,11 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didSubscribeTo characteristic: CBCharacteristic) {
-        logger.error("🚨 CRITICAL: Central subscribed! Connection successful!")
-        logger.error("🔗 Central: \(central.identifier.uuidString)")
-        logger.error("🔗 Characteristic: \(characteristic.uuid.uuidString)")
-        logger.error("📊 Connection details - RSSI: unknown, Services discovered: yes")
-        logger.error("✅ BLE connection established successfully")
+        uiLog("🚨 CRITICAL: Central subscribed! Connection successful!", level: .success)
+        uiLog("🔗 Central: \(central.identifier.uuidString)", level: .info)
+        uiLog("🔗 Characteristic: \(characteristic.uuid.uuidString)", level: .info)
+        uiLog("📊 Connection details - RSSI: unknown, Services discovered: yes", level: .info)
+        uiLog("✅ BLE connection established successfully", level: .success)
         
         connectedCentrals.insert(central)
         DispatchQueue.main.async {
@@ -404,12 +426,12 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom characteristic: CBCharacteristic) {
-        logger.error("🚨 CRITICAL: Central disconnected during setup!")
-        logger.error("🔌 Central: \(central.identifier.uuidString)")
-        logger.error("🔌 Characteristic: \(characteristic.uuid.uuidString)")
-        logger.error("❓ Disconnect reason: Client initiated or connection lost during service discovery")
-        logger.error("🧹 Cleaning up connection data for client")
-        logger.error("📊 Peripheral state: \(peripheral.state.rawValue)")
+        uiLog("🚨 CRITICAL: Central disconnected during setup!", level: .error)
+        uiLog("🔌 Central: \(central.identifier.uuidString)", level: .error)
+        uiLog("🔌 Characteristic: \(characteristic.uuid.uuidString)", level: .error)
+        uiLog("❓ Disconnect reason: Client initiated or connection lost during service discovery", level: .error)
+        uiLog("🧹 Cleaning up connection data for client", level: .info)
+        uiLog("📊 Peripheral state: \(peripheral.state.rawValue)", level: .info)
         
         connectedCentrals.remove(central)
         receivingData[central] = nil
@@ -424,70 +446,70 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
-        logger.info("📝 Received \(requests.count) write request(s) from client")
+        uiLog("📝 Received \(requests.count) write request(s) from client", level: .info)
         
         for request in requests {
             if request.characteristic == requestCharacteristic {
                 if let data = request.value {
-                    logger.info("📦 Processing \(data.count) bytes from client \(request.central.identifier)")
+                    uiLog("📦 Processing \(data.count) bytes from client \(request.central.identifier)", level: .info)
                     handleIncomingData(data, from: request.central)
                 }
                 peripheral.respond(to: request, withResult: .success)
             } else {
-                logger.warning("⚠️ Unknown characteristic write attempt: \(request.characteristic.uuid)")
+                uiLog("⚠️ Unknown characteristic write attempt: \(request.characteristic.uuid)", level: .warning)
                 peripheral.respond(to: request, withResult: .attributeNotFound)
             }
         }
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
-        logger.error("🚨 CRITICAL: Windows service discovery read request!")
-        logger.error("🔍 Central: \(request.central.identifier.uuidString)")
-        logger.error("🔍 Characteristic: \(request.characteristic.uuid.uuidString)")
-        logger.error("🔍 Offset: \(request.offset)")
-        logger.error("🔍 Peripheral state: \(peripheral.state.rawValue)")
+        uiLog("🚨 CRITICAL: Windows service discovery read request!", level: .warning)
+        uiLog("🔍 Central: \(request.central.identifier.uuidString)", level: .info)
+        uiLog("🔍 Characteristic: \(request.characteristic.uuid.uuidString)", level: .info)
+        uiLog("🔍 Offset: \(request.offset)", level: .info)
+        uiLog("🔍 Peripheral state: \(peripheral.state.rawValue)", level: .info)
         
         // Check which characteristic is being read
         if request.characteristic.uuid == self.requestCharacteristicUUID {
-            logger.error("  → REQUEST characteristic (write-only) - should deny read")
+            uiLog("  → REQUEST characteristic (write-only) - should deny read", level: .warning)
         } else if request.characteristic.uuid == self.responseCharacteristicUUID {
-            logger.error("  → RESPONSE characteristic (notify/read) - should allow read")
+            uiLog("  → RESPONSE characteristic (notify/read) - should allow read", level: .info)
         } else if request.characteristic.uuid == self.controlCharacteristicUUID {
-            logger.error("  → CONTROL characteristic (read/write/notify) - should allow read")
+            uiLog("  → CONTROL characteristic (read/write/notify) - should allow read", level: .info)
         } else {
-            logger.error("  → ⚠️ UNKNOWN characteristic!")
-            logger.error("  Expected UUIDs:")
-            logger.error("    Request:  \(self.requestCharacteristicUUID.uuidString)")
-            logger.error("    Response: \(self.responseCharacteristicUUID.uuidString)")  
-            logger.error("    Control:  \(self.controlCharacteristicUUID.uuidString)")
+            uiLog("  → ⚠️ UNKNOWN characteristic!", level: .error)
+            uiLog("  Expected UUIDs:", level: .info)
+            uiLog("    Request:  \(self.requestCharacteristicUUID.uuidString)", level: .info)
+            uiLog("    Response: \(self.responseCharacteristicUUID.uuidString)", level: .info)  
+            uiLog("    Control:  \(self.controlCharacteristicUUID.uuidString)", level: .info)
         }
         
         // For response and control characteristics that support read, return empty value
         // For request characteristic (write-only), return not permitted
         if request.characteristic.uuid == self.responseCharacteristicUUID || 
            request.characteristic.uuid == self.controlCharacteristicUUID {
-            logger.error("🚨 CRITICAL: Allowing read - returning empty data")
+            uiLog("🚨 CRITICAL: Allowing read - returning empty data", level: .warning)
             request.value = Data() // Return empty data for readable characteristics
             peripheral.respond(to: request, withResult: .success)
-            logger.error("✅ CRITICAL: Responded with .success (empty data)")
+            uiLog("✅ CRITICAL: Responded with .success (empty data)", level: .success)
         } else if request.characteristic.uuid == self.requestCharacteristicUUID {
-            logger.error("🚨 CRITICAL: Denying read for write-only characteristic")
+            uiLog("🚨 CRITICAL: Denying read for write-only characteristic", level: .warning)
             peripheral.respond(to: request, withResult: .readNotPermitted)
-            logger.error("❌ CRITICAL: Responded with .readNotPermitted")
+            uiLog("❌ CRITICAL: Responded with .readNotPermitted", level: .error)
         } else {
-            logger.error("🚨 CRITICAL: Unknown characteristic - returning attributeNotFound")
+            uiLog("🚨 CRITICAL: Unknown characteristic - returning attributeNotFound", level: .error)
             peripheral.respond(to: request, withResult: .attributeNotFound)
-            logger.error("❌ CRITICAL: Responded with .attributeNotFound")
+            uiLog("❌ CRITICAL: Responded with .attributeNotFound", level: .error)
         }
         
-        logger.error("🔍 CRITICAL: Read request handled - current state:")
-        logger.error("   Peripheral state: \(peripheral.state.rawValue)")
-        logger.error("   Connected centrals: \(self.connectedCentrals.count)")
-        logger.error("   Is advertising: \(peripheral.isAdvertising)")
+        uiLog("🔍 CRITICAL: Read request handled - current state:", level: .info)
+        uiLog("   Peripheral state: \(peripheral.state.rawValue)", level: .info)
+        uiLog("   Connected centrals: \(self.connectedCentrals.count)", level: .info)
+        uiLog("   Is advertising: \(peripheral.isAdvertising)", level: .info)
     }
     
     func peripheralManagerIsReady(toUpdateSubscribers peripheral: CBPeripheralManager) {
-        logger.info("🔄 Peripheral ready to update subscribers")
+        uiLog("🔄 Peripheral ready to update subscribers", level: .info)
         // Continue sending pending data
         for central in connectedCentrals {
             if pendingResponses[central] != nil {
@@ -497,22 +519,22 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, willRestoreState dict: [String : Any]) {
-        logger.info("🔄 Peripheral manager will restore state: \(dict.keys)")
+        uiLog("🔄 Peripheral manager will restore state: \(dict.keys)", level: .info)
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didPublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?) {
         if let error = error {
-            logger.error("❌ Failed to publish L2CAP channel: \(error.localizedDescription)")
+            uiLog("❌ Failed to publish L2CAP channel: \(error.localizedDescription)", level: .error)
         } else {
-            logger.info("✅ Published L2CAP channel: \(PSM)")
+            uiLog("✅ Published L2CAP channel: \(PSM)", level: .success)
         }
     }
     
     func peripheralManager(_ peripheral: CBPeripheralManager, didUnpublishL2CAPChannel PSM: CBL2CAPPSM, error: Error?) {
         if let error = error {
-            logger.error("❌ Failed to unpublish L2CAP channel: \(error.localizedDescription)")
+            uiLog("❌ Failed to unpublish L2CAP channel: \(error.localizedDescription)", level: .error)
         } else {
-            logger.info("ℹ️ Unpublished L2CAP channel: \(PSM)")
+            uiLog("ℹ️ Unpublished L2CAP channel: \(PSM)", level: .info)
         }
     }
     
