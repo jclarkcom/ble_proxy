@@ -197,7 +197,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("🏷️ Device name: BLE-Proxy", level: .info)
         
         let advertisementData: [String: Any] = [
-            CBAdvertisementDataServiceUUIDs: [serviceUUID, gapServiceUUID],
+            CBAdvertisementDataServiceUUIDsKey: [serviceUUID, gapServiceUUID],
             CBAdvertisementDataLocalNameKey: "BLE-Proxy"
         ]
         
