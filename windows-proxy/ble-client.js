@@ -21,6 +21,10 @@ class BLEClient extends EventEmitter {
     this.receiving = false;
     this.receivedChunks = [];
     
+    this.normalizedServiceUUID = config.bleServiceUUID.replace(/-/g, '').toLowerCase();
+    this.generalScanMode = false;
+    this.discoveredDevices = new Map();
+    
     this.setupNobleHandlers();
   }
   
@@ -61,8 +65,6 @@ class BLEClient extends EventEmitter {
       console.warn(warning);
     });
     
-    this.generalScanMode = false;
-    this.discoveredDevices = new Map();
   }
 
   async initialize() {
@@ -97,8 +99,8 @@ class BLEClient extends EventEmitter {
     
     console.log(chalk.blue('Scanning for BLE Proxy iOS device...'));
     
-    // Scan for devices advertising our service UUID
-    noble.startScanning([this.config.bleServiceUUID], false);
+    // Use normalized 128-bit UUID without dashes per noble expectations
+    noble.startScanning([this.normalizedServiceUUID], false);
     
     // Also scan for devices with local name
     noble.startScanning([], false);
@@ -200,10 +202,10 @@ class BLEClient extends EventEmitter {
 
   async handlePeripheralDiscovery(peripheral) {
     const deviceName = peripheral.advertisement.localName || 'Unknown';
-    const serviceUUIDs = peripheral.advertisement.serviceUuids || [];
+    const serviceUUIDs = (peripheral.advertisement.serviceUuids || []).map(u => u.replace(/-/g, '').toLowerCase());
     
     // Check if this is our iOS proxy device
-    const hasOurService = serviceUUIDs.includes(this.config.bleServiceUUID);
+    const hasOurService = serviceUUIDs.includes(this.normalizedServiceUUID);
     const hasProxyName = deviceName.includes('BLE-Proxy') || deviceName.includes('Proxy');
     
     if (!hasOurService && !hasProxyName) {
