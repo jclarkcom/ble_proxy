@@ -1269,13 +1269,23 @@ class BLEProxy {
 
   async decompressData(data) {
     return new Promise((resolve, reject) => {
-      // Try zlib inflate first (iOS uses .zlib compression)
+      // Try zlib inflate first (iOS should use .zlib compression)
       zlib.inflate(data, (err, decompressed) => {
         if (err) {
           // Fallback to gunzip if inflate fails
           zlib.gunzip(data, (err2, decompressed2) => {
-            if (err2) reject(err2);
-            else resolve(decompressed2.toString());
+            if (err2) {
+              // If both fail, try treating as uncompressed data
+              console.log(chalk.yellow(`Both decompression methods failed, trying as uncompressed data`));
+              try {
+                const result = data.toString('utf8');
+                resolve(result);
+              } catch (parseError) {
+                reject(new Error(`All decompression methods failed. Original errors: inflate: ${err.message}, gunzip: ${err2.message}, raw: ${parseError.message}`));
+              }
+            } else {
+              resolve(decompressed2.toString());
+            }
           });
         } else {
           resolve(decompressed.toString());
