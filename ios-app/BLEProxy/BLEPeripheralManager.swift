@@ -29,17 +29,26 @@ class BLEPeripheralManager: NSObject, ObservableObject {
     private let responseCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD02")
     private let controlCharacteristicUUID = CBUUID(string: "A1B2C3D4-E5F6-7890-1234-567890ABCD03")
     
-    // Generic Attribute Profile (GAP) service and Service Changed characteristic
+    // Generic Attribute Profile (GATT) service and Service Changed characteristic
     // This forces iOS clients to refresh their GATT cache
-    private let gapServiceUUID = CBUUID(string: "1801") // Generic Attribute Profile
+    private let gattServiceUUID = CBUUID(string: "1801") // Generic Attribute Profile (GATT)
     private let serviceChangedCharacteristicUUID = CBUUID(string: "2A05") // Service Changed
+    
+    // Generic Access Profile (GAP) service and characteristics
+    // Required for proper iOS BLE cache management
+    private let gapServiceUUID = CBUUID(string: "1800") // Generic Access Profile (GAP)
+    private let deviceNameCharacteristicUUID = CBUUID(string: "2A00") // Device Name
+    private let appearanceCharacteristicUUID = CBUUID(string: "2A01") // Appearance
     
     // Characteristics and services
     private var requestCharacteristic: CBMutableCharacteristic!
     private var responseCharacteristic: CBMutableCharacteristic!
     private var controlCharacteristic: CBMutableCharacteristic!
     private var serviceChangedCharacteristic: CBMutableCharacteristic!
+    private var deviceNameCharacteristic: CBMutableCharacteristic!
+    private var appearanceCharacteristic: CBMutableCharacteristic!
     private var proxyService: CBMutableService!
+    private var gattService: CBMutableService!
     private var gapService: CBMutableService!
     
     // MARK: - Core Bluetooth
@@ -154,6 +163,30 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("  • UUID: \(self.serviceChangedCharacteristicUUID.uuidString)", level: .info)
         uiLog("  • Properties: indicate (forces iOS cache refresh)", level: .info)
         
+        // Create Device Name characteristic for GAP service
+        uiLog("📝 Creating DEVICE NAME characteristic (for GAP service)...", level: .info)
+        let deviceNameData = "BLE-Proxy".data(using: .utf8)!
+        deviceNameCharacteristic = CBMutableCharacteristic(
+            type: deviceNameCharacteristicUUID,
+            properties: [.read],
+            value: deviceNameData,
+            permissions: [.readable]
+        )
+        uiLog("  • UUID: \(self.deviceNameCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: read", level: .info)
+        
+        // Create Appearance characteristic for GAP service
+        uiLog("📝 Creating APPEARANCE characteristic (for GAP service)...", level: .info)
+        let appearanceData = Data([0x00, 0x00]) // Generic category
+        appearanceCharacteristic = CBMutableCharacteristic(
+            type: appearanceCharacteristicUUID,
+            properties: [.read],
+            value: appearanceData,
+            permissions: [.readable]
+        )
+        uiLog("  • UUID: \(self.appearanceCharacteristicUUID.uuidString)", level: .info)
+        uiLog("  • Properties: read", level: .info)
+        
         // Create main proxy service
         uiLog("🏗️ Creating main BLE proxy service...", level: .info)
         proxyService = CBMutableService(type: serviceUUID, primary: true)
@@ -163,19 +196,31 @@ class BLEPeripheralManager: NSObject, ObservableObject {
             controlCharacteristic
         ]
         
-        // Create Generic Attribute Profile (GAP) service
-        uiLog("🏗️ Creating GAP service (Generic Attribute Profile)...", level: .info)
-        gapService = CBMutableService(type: gapServiceUUID, primary: true)
-        gapService.characteristics = [
+        // Create Generic Attribute Profile (GATT) service
+        uiLog("🏗️ Creating GATT service (Generic Attribute Profile)...", level: .info)
+        gattService = CBMutableService(type: gattServiceUUID, primary: true)
+        gattService.characteristics = [
             serviceChangedCharacteristic
         ]
         
+        // Create Generic Access Profile (GAP) service
+        uiLog("🏗️ Creating GAP service (Generic Access Profile)...", level: .info)
+        gapService = CBMutableService(type: gapServiceUUID, primary: true)
+        gapService.characteristics = [
+            deviceNameCharacteristic,
+            appearanceCharacteristic
+        ]
+        
         uiLog("✅ Main service created with \(self.proxyService.characteristics?.count ?? 0) characteristics", level: .success)
-        uiLog("✅ GAP service created with Service Changed characteristic", level: .success)
+        uiLog("✅ GATT service created with Service Changed characteristic", level: .success)
+        uiLog("✅ GAP service created with Device Name and Appearance characteristics", level: .success)
         
         // Add both services
         uiLog("➕ Adding main proxy service to peripheral manager...", level: .info)
         peripheralManager.add(proxyService)
+        
+        uiLog("➕ Adding GATT service to peripheral manager...", level: .info)
+        peripheralManager.add(gattService)
         
         uiLog("➕ Adding GAP service to peripheral manager...", level: .info)
         peripheralManager.add(gapService)
@@ -197,7 +242,7 @@ class BLEPeripheralManager: NSObject, ObservableObject {
         uiLog("🏷️ Device name: BLE-Proxy", level: .info)
         
         let advertisementData: [String: Any] = [
-            CBAdvertisementDataServiceUUIDsKey: [serviceUUID, gapServiceUUID],
+            CBAdvertisementDataServiceUUIDsKey: [serviceUUID, gattServiceUUID, gapServiceUUID],
             CBAdvertisementDataLocalNameKey: "BLE-Proxy"
         ]
         
@@ -451,7 +496,9 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
             uiLog("📡 BLE advertising started successfully", level: .success)
             uiLog("🎯 Device name: BLE-Proxy", level: .info)
             uiLog("🔑 Service UUID: \(self.serviceUUID.uuidString)", level: .info)
+            uiLog("🔑 GATT Service UUID: \(self.gattServiceUUID.uuidString)", level: .info)
             uiLog("🔑 GAP Service UUID: \(self.gapServiceUUID.uuidString)", level: .info)
+            uiLog("✅ Both GAP (1800) and GATT (1801) services exposed for proper iOS cache management", level: .success)
             uiLog("👀 Waiting for Windows client to discover and connect...", level: .info)
             DispatchQueue.main.async {
                 self.isAdvertising = true

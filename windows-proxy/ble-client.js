@@ -548,8 +548,8 @@ class BLEClient extends EventEmitter {
       console.log(chalk.gray(`  Looking for service UUID: ${targetServiceUUID}`));
       
       const proxyService = services.find(service => {
-        const serviceUUID = service.uuid.toLowerCase();
-        console.log(chalk.gray(`    Comparing: ${serviceUUID} === ${targetServiceUUID}`));
+        const serviceUUID = service.uuid.replace(/-/g, '').toLowerCase();
+        console.log(chalk.gray(`    Comparing: ${service.uuid} === ${targetServiceUUID}`));
         return serviceUUID === targetServiceUUID;
       });
       
@@ -563,7 +563,10 @@ class BLEClient extends EventEmitter {
       // Also look for GAP service (1801) with Service Changed characteristic (2A05)
       // This is crucial for forcing iOS cache invalidation
       console.log(chalk.blue('🔍 Looking for GAP service (1801) with Service Changed characteristic...'));
-      const gapService = services.find(service => service.uuid.toLowerCase() === '1801');
+      const gapService = services.find(service => {
+        const serviceUUID = service.uuid.replace(/-/g, '').toLowerCase();
+        return serviceUUID === '1801' || serviceUUID === '00001801' || service.uuid.toLowerCase().includes('1801');
+      });
       
       if (gapService) {
         console.log(chalk.green(`✓ Found GAP service: ${gapService.uuid}`));
@@ -581,7 +584,10 @@ class BLEClient extends EventEmitter {
             });
             
             // Look for Service Changed characteristic (2A05)
-            const serviceChangedChar = gapCharacteristics.find(char => char.uuid.toLowerCase() === '2a05');
+            const serviceChangedChar = gapCharacteristics.find(char => {
+              const charUUID = char.uuid.replace(/-/g, '').toLowerCase();
+              return charUUID === '2a05' || charUUID === '00002a05' || char.uuid.toLowerCase().includes('2a05');
+            });
             
             if (serviceChangedChar) {
               console.log(chalk.green(`✅ Found Service Changed characteristic: ${serviceChangedChar.uuid}`));
