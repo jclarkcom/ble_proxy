@@ -239,6 +239,10 @@ class BLEProxy {
         this.handleTestRequestAPI(req, res);
         break;
         
+      case '/api/clear-cache':
+        this.handleClearCacheAPI(req, res);
+        break;
+        
       default:
         res.writeHead(404);
         res.end(JSON.stringify({ error: 'API endpoint not found' }));
@@ -326,6 +330,45 @@ class BLEProxy {
         res.writeHead(500);
         res.end(JSON.stringify({ success: false, error: error.message }));
       });
+  }
+
+  handleClearCacheAPI(req, res) {
+    if (req.method !== 'POST') {
+      res.writeHead(405, { 'Allow': 'POST' });
+      res.end(JSON.stringify({ error: 'Method not allowed' }));
+      return;
+    }
+    
+    try {
+      // Clear server-side device cache
+      const devicesCleared = this.scanResults.size;
+      this.scanResults.clear();
+      
+      // Reset BLE client if available
+      if (this.bleClient && typeof this.bleClient.clearCache === 'function') {
+        this.bleClient.clearCache();
+      }
+      
+      console.log(chalk.blue('🧹 Server cache cleared by user request'));
+      
+      res.writeHead(200);
+      res.end(JSON.stringify({ 
+        success: true, 
+        message: 'Server cache cleared successfully',
+        devicesCleared: devicesCleared
+      }));
+      
+      // Broadcast cache clear event to all web clients
+      this.broadcastToWebClients({ 
+        type: 'cacheCleared', 
+        timestamp: new Date().toISOString() 
+      });
+      
+    } catch (error) {
+      console.error(chalk.red('❌ Error clearing cache:', error));
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Failed to clear cache' }));
+    }
   }
 
   async handleTestRequestAPI(req, res) {

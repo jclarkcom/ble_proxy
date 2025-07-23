@@ -48,6 +48,9 @@ class BLEScanner {
         };
         
         this.init();
+        
+        // Start auto-clearing stale devices every 10 seconds
+        setInterval(() => this.clearStaleDevices(), 10000);
     }
     
     async init() {
@@ -267,6 +270,9 @@ class BLEScanner {
     }
     
     addDevice(device) {
+        // Add timestamp for cache management
+        device.lastSeen = Date.now();
+        
         this.devices.set(device.id, device);
         this.renderDevices();
         this.updateDeviceCount();
@@ -437,7 +443,37 @@ class BLEScanner {
         this.devices.clear();
         this.renderDevices();
         this.updateDeviceCount();
-        this.log('Device list cleared', 'info');
+        this.log('Device list cleared - removed all cached devices', 'info');
+        
+        // Also notify server to clear its cache
+        fetch('/api/clear-cache', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                this.log('Server cache cleared', 'success');
+            })
+            .catch(err => {
+                this.log('Failed to clear server cache: ' + err.message, 'warning');
+            });
+    }
+    
+    // Auto-clear stale devices that haven't been seen recently
+    clearStaleDevices() {
+        const now = Date.now();
+        const staleThreshold = 30000; // 30 seconds
+        let removedCount = 0;
+        
+        for (const [deviceId, device] of this.devices.entries()) {
+            if (now - device.lastSeen > staleThreshold) {
+                this.devices.delete(deviceId);
+                removedCount++;
+            }
+        }
+        
+        if (removedCount > 0) {
+            this.renderDevices();
+            this.updateDeviceCount();
+            this.log(`Auto-cleared ${removedCount} stale device(s)`, 'info');
+        }
     }
     
     updateDeviceCount() {
