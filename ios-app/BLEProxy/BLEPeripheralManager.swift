@@ -482,7 +482,7 @@ extension BLEPeripheralManager: CBPeripheralManagerDelegate {
         
         logger.error("🔍 CRITICAL: Read request handled - current state:")
         logger.error("   Peripheral state: \(peripheral.state.rawValue)")
-        logger.error("   Connected centrals: \(connectedCentrals.count)")
+        logger.error("   Connected centrals: \(self.connectedCentrals.count)")
         logger.error("   Is advertising: \(peripheral.isAdvertising)")
     }
     
