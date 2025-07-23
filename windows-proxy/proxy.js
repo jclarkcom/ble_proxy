@@ -1123,9 +1123,9 @@ class BLEProxy {
       } else {
         // Normal proxy response - write as-is
         res.writeHead(response.statusCode, response.headers);
-        if (response.body) {
-          const bodyBuffer = Buffer.from(response.body, 'base64');
-          res.write(bodyBuffer);
+      if (response.body) {
+        const bodyBuffer = Buffer.from(response.body, 'base64');
+        res.write(bodyBuffer);
         }
       }
       
@@ -1212,11 +1212,11 @@ process.on('SIGINT', async () => {
   }, 5000);
   
   try {
-    if (global.proxyInstance) {
-      await global.proxyInstance.stop();
-    }
+  if (global.proxyInstance) {
+    await global.proxyInstance.stop();
+  }
     clearTimeout(forceExitTimer);
-    process.exit(0);
+  process.exit(0);
   } catch (error) {
     console.error(chalk.red('Error during shutdown:'), error);
     clearTimeout(forceExitTimer);

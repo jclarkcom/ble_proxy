@@ -41,6 +41,9 @@ class ProxyViewModel: ObservableObject {
     // MARK: - Public Methods
     func initialize() {
         logger.info("Initializing proxy system")
+        
+        // TEST ERROR MESSAGE - Verify logging system works
+        addDebugLog("🧪 TEST ERROR MESSAGE - Debug logging system test", level: .error)
         addDebugLog("🚀 BLE Proxy iOS app initializing", level: .info)
         addDebugLog("📱 iOS BLE peripheral mode", level: .info)
         addDebugLog("🔵 Bluetooth state: checking", level: .info)
